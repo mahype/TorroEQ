@@ -5,8 +5,8 @@ use ratatui::style::{Color, Modifier, Style, Stylize};
 use ratatui::symbols;
 use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{
-    Block, BorderType, Borders, Clear, Gauge, List, ListItem, ListState, Paragraph, Sparkline,
-    Widget, Wrap,
+    Block, BorderType, Borders, Clear, Gauge, List, ListItem, ListState, Padding, Paragraph,
+    Sparkline, Widget, Wrap,
 };
 
 use crate::app::{App, Dialog, ViewMode};
@@ -191,6 +191,7 @@ fn render_session(frame: &mut Frame<'_>, area: Rect, app: &mut App) {
         .block(
             Block::default()
                 .borders(Borders::ALL)
+                .padding(Padding::horizontal(1))
                 .border_style(Style::default().fg(BORDER)),
         ),
         rows[4],
@@ -504,6 +505,7 @@ fn panel<'a>(title: &'a str, focused: bool) -> Block<'a> {
         .title(title)
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
+        .padding(Padding::horizontal(1))
         .border_style(Style::default().fg(if focused { ACCENT } else { BORDER }))
         .style(Style::default().bg(PANEL))
 }

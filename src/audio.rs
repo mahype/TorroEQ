@@ -43,6 +43,19 @@ struct DumpInfo {
     props: Option<serde_json::Map<String, serde_json::Value>>,
 }
 
+#[derive(Deserialize)]
+struct PulseSink {
+    index: u32,
+    name: String,
+}
+
+#[derive(Deserialize)]
+struct SinkInput {
+    index: u32,
+    sink: u32,
+    properties: serde_json::Map<String, serde_json::Value>,
+}
+
 pub fn discover_outputs() -> Result<Vec<OutputDevice>> {
     let default_name = Command::new("pactl")
         .arg("get-default-sink")
@@ -167,6 +180,20 @@ impl AudioEngine {
         if !status.success() {
             bail!("pactl could not activate TorroEQ sink");
         }
+        if let Some(previous) = &self.previous_default
+            && let (Ok(sinks), Ok(inputs)) = (pulse_sinks(), sink_inputs())
+            && let Some(previous_id) = sinks
+                .iter()
+                .find(|sink| &sink.name == previous)
+                .map(|sink| sink.index)
+        {
+            for input in inputs {
+                let node_name = string_prop(&input.properties, "node.name").unwrap_or_default();
+                if input.sink == previous_id && node_name != "torroeq_output" {
+                    let _ = move_sink_input(input.index, "torroeq_sink");
+                }
+            }
+        }
         self.activated = true;
         Ok(())
     }
@@ -179,6 +206,18 @@ impl AudioEngine {
                 .context("could not restore previous audio output")?;
             if !status.success() {
                 bail!("pactl could not restore previous audio output");
+            }
+            if let (Ok(sinks), Ok(inputs)) = (pulse_sinks(), sink_inputs())
+                && let Some(torroeq_id) = sinks
+                    .iter()
+                    .find(|sink| sink.name == "torroeq_sink")
+                    .map(|sink| sink.index)
+            {
+                for input in inputs {
+                    if input.sink == torroeq_id {
+                        let _ = move_sink_input(input.index, previous);
+                    }
+                }
             }
         }
         self.activated = false;
@@ -209,6 +248,37 @@ fn default_sink_name() -> Option<String> {
         .filter(|output| output.status.success())
         .and_then(|output| String::from_utf8(output.stdout).ok())
         .map(|name| name.trim().to_string())
+}
+
+fn pulse_sinks() -> Result<Vec<PulseSink>> {
+    pactl_json(&["list", "sinks"])
+}
+
+fn sink_inputs() -> Result<Vec<SinkInput>> {
+    pactl_json(&["list", "sink-inputs"])
+}
+
+fn pactl_json<T: for<'de> Deserialize<'de>>(arguments: &[&str]) -> Result<T> {
+    let output = Command::new("pactl")
+        .arg("--format=json")
+        .args(arguments)
+        .output()
+        .context("could not inspect PulseAudio-compatible PipeWire objects")?;
+    if !output.status.success() {
+        bail!("pactl {} failed", arguments.join(" "));
+    }
+    serde_json::from_slice(&output.stdout).context("could not parse pactl JSON output")
+}
+
+fn move_sink_input(index: u32, target: &str) -> Result<()> {
+    let status = Command::new("pactl")
+        .args(["move-sink-input", &index.to_string(), target])
+        .status()
+        .with_context(|| format!("could not move audio stream {index}"))?;
+    if !status.success() {
+        bail!("could not move audio stream {index} to {target}");
+    }
+    Ok(())
 }
 
 impl Drop for AudioEngine {
