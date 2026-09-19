@@ -1,5 +1,6 @@
-use std::mem;
-use std::process::Command;
+use std::ffi::{CString, c_void};
+use std::process::{Command, Stdio};
+use std::ptr;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
@@ -8,18 +9,14 @@ use std::thread::{self, JoinHandle};
 use anyhow::{Context, Result, anyhow, bail};
 use pipewire as pw;
 use pw::properties::properties;
-use pw::spa;
-use pw::spa::pod::Pod;
-use rtrb::{Consumer, Producer, RingBuffer};
+use rtrb::{Producer, RingBuffer};
 use serde::Deserialize;
 
 use crate::analyzer;
-use crate::dsp::{SharedParams, StereoEq};
+use crate::dsp::{BlockMetrics, ParamSnapshot, SharedParams, StereoEq};
 use crate::telemetry::Telemetry;
 
 const SAMPLE_RATE: u32 = 48_000;
-const CHANNELS: u32 = 2;
-const AUDIO_RING_SAMPLES: usize = 65_536;
 const ANALYZER_RING_SAMPLES: usize = 32_768;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -287,19 +284,74 @@ impl Drop for AudioEngine {
     }
 }
 
-struct CaptureData {
-    format: spa::param::audio::AudioInfoRaw,
+struct FilterData {
     eq: StereoEq,
     params: Arc<SharedParams>,
-    audio: Producer<f32>,
     analyzer: Producer<f32>,
     telemetry: Arc<Telemetry>,
-    last_params: crate::dsp::ParamSnapshot,
+    last_params: ParamSnapshot,
+    input_left: *mut c_void,
+    input_right: *mut c_void,
+    output_left: *mut c_void,
+    output_right: *mut c_void,
 }
 
-struct PlaybackData {
-    audio: Consumer<f32>,
-    capture: *mut pw::sys::pw_stream,
+unsafe extern "C" fn process_filter(
+    data: *mut c_void,
+    position: *mut pw::spa::sys::spa_io_position,
+) {
+    if data.is_null() || position.is_null() {
+        return;
+    }
+    // SAFETY: PipeWire invokes this callback with the FilterData pointer and
+    // position supplied for the lifetime of the connected filter.
+    let state = unsafe { &mut *data.cast::<FilterData>() };
+    let frames = unsafe { (*position).clock.duration as usize };
+    if frames == 0 {
+        return;
+    }
+    let input_left =
+        unsafe { pw::sys::pw_filter_get_dsp_buffer(state.input_left, frames as u32).cast::<f32>() };
+    let input_right = unsafe {
+        pw::sys::pw_filter_get_dsp_buffer(state.input_right, frames as u32).cast::<f32>()
+    };
+    let output_left = unsafe {
+        pw::sys::pw_filter_get_dsp_buffer(state.output_left, frames as u32).cast::<f32>()
+    };
+    let output_right = unsafe {
+        pw::sys::pw_filter_get_dsp_buffer(state.output_right, frames as u32).cast::<f32>()
+    };
+    if input_left.is_null()
+        || input_right.is_null()
+        || output_left.is_null()
+        || output_right.is_null()
+    {
+        return;
+    }
+
+    let params = state.params.try_snapshot(state.last_params);
+    state.last_params = params;
+    state.eq.apply_params(&params);
+    let mut metrics = BlockMetrics::default();
+    for index in 0..frames {
+        let left = unsafe { *input_left.add(index) };
+        let right = unsafe { *input_right.add(index) };
+        let processed = state.eq.process_frame(left, right);
+        unsafe {
+            *output_left.add(index) = processed.left;
+            *output_right.add(index) = processed.right;
+        }
+        metrics.add_frame(processed.metrics);
+        let _ = state
+            .analyzer
+            .push((processed.left + processed.right) * 0.5);
+    }
+    state.telemetry.publish_audio(
+        metrics.input_peak,
+        metrics.output_peak,
+        metrics.clipped,
+        metrics.limited,
+    );
 }
 
 fn run_pipewire(
@@ -312,10 +364,6 @@ fn run_pipewire(
 ) -> Result<()> {
     pw::init();
     let mainloop = pw::main_loop::MainLoopRc::new(None)?;
-    let context = pw::context::ContextRc::new(&mainloop, None)?;
-    let core = context.connect_rc(None)?;
-
-    let (audio_producer, audio_consumer) = RingBuffer::new(AUDIO_RING_SAMPLES);
     let (analyzer_producer, analyzer_consumer) = RingBuffer::new(ANALYZER_RING_SAMPLES);
     let analyzer_thread = analyzer::spawn(
         analyzer_consumer,
@@ -324,178 +372,168 @@ fn run_pipewire(
         Arc::clone(&stop),
     );
 
-    let capture = pw::stream::StreamBox::new(
-        &core,
-        "TorroEQ input",
-        properties! {
-            *pw::keys::NODE_NAME => "torroeq_sink",
-            *pw::keys::NODE_DESCRIPTION => "TorroEQ Equalizer",
-            *pw::keys::NODE_VIRTUAL => "true",
-            *pw::keys::MEDIA_CLASS => "Audio/Sink",
-            *pw::keys::MEDIA_TYPE => "Audio",
-            *pw::keys::MEDIA_CATEGORY => "Capture",
-            *pw::keys::MEDIA_ROLE => "Music",
-            *pw::keys::AUDIO_CHANNELS => "2",
-        },
-    )?;
-    let playback = pw::stream::StreamBox::new(
-        &core,
-        "TorroEQ output",
-        properties! {
-            *pw::keys::NODE_NAME => "torroeq_output",
-            *pw::keys::NODE_DESCRIPTION => "TorroEQ processed output",
-            *pw::keys::MEDIA_TYPE => "Audio",
-            *pw::keys::MEDIA_CATEGORY => "Playback",
-            *pw::keys::MEDIA_ROLE => "Music",
-            *pw::keys::TARGET_OBJECT => output.name.as_str(),
-            *pw::keys::AUDIO_CHANNELS => "2",
-        },
-    )?;
-
-    let capture_data = CaptureData {
-        format: Default::default(),
+    let mut filter_data = Box::new(FilterData {
         eq: StereoEq::new(SAMPLE_RATE as f32),
         params,
-        audio: audio_producer,
         analyzer: analyzer_producer,
         telemetry: Arc::clone(&telemetry),
-        last_params: crate::dsp::ParamSnapshot::default(),
+        last_params: ParamSnapshot::default(),
+        input_left: ptr::null_mut(),
+        input_right: ptr::null_mut(),
+        output_left: ptr::null_mut(),
+        output_right: ptr::null_mut(),
+    });
+    let events = Box::new(pw::sys::pw_filter_events {
+        version: pw::sys::PW_VERSION_FILTER_EVENTS,
+        destroy: None,
+        state_changed: None,
+        io_changed: None,
+        param_changed: None,
+        add_buffer: None,
+        remove_buffer: None,
+        process: Some(process_filter),
+        drained: None,
+        command: None,
+    });
+    let filter_name = CString::new("TorroEQ filter")?;
+    let filter = unsafe {
+        pw::sys::pw_filter_new_simple(
+            mainloop.loop_().as_raw_ptr(),
+            filter_name.as_ptr(),
+            properties! {
+                *pw::keys::NODE_NAME => "torroeq_filter",
+                *pw::keys::NODE_DESCRIPTION => "TorroEQ DSP",
+                *pw::keys::NODE_VIRTUAL => "true",
+                *pw::keys::OBJECT_REGISTER => "true",
+                *pw::keys::MEDIA_CLASS => "Audio/Filter",
+                *pw::keys::MEDIA_TYPE => "Audio",
+                *pw::keys::MEDIA_CATEGORY => "Filter",
+                *pw::keys::MEDIA_ROLE => "DSP",
+                *pw::keys::AUDIO_CHANNELS => "2",
+                "audio.position" => "[ FL FR ]",
+                "node.autoconnect" => "false",
+            }
+            .into_raw(),
+            events.as_ref(),
+            filter_data.as_mut() as *mut FilterData as *mut c_void,
+        )
     };
-    let _capture_listener = capture
-        .add_local_listener_with_user_data(capture_data)
-        .param_changed(|_, data, id, param| {
-            if id != spa::param::ParamType::Format.as_raw() {
-                return;
-            }
-            let Some(param) = param else { return };
-            if data.format.parse(param).is_ok() {
-                data.eq.set_sample_rate(data.format.rate() as f32);
-            }
-        })
-        .process(|stream, data| {
-            let Some(mut buffer) = stream.dequeue_buffer() else {
-                return;
-            };
-            let Some(plane) = buffer.datas_mut().first_mut() else {
-                return;
-            };
-            let byte_count = plane.chunk().size() as usize;
-            let Some(bytes) = plane.data() else { return };
-            let params = data.params.try_snapshot(data.last_params);
-            data.last_params = params;
-            data.eq.apply_params(&params);
-            let mut metrics = crate::dsp::BlockMetrics::default();
-            let (frames, _) = bytes[..byte_count.min(bytes.len())].as_chunks::<8>();
-            for frame in frames {
-                let left = f32::from_le_bytes(frame[0..4].try_into().unwrap_or([0; 4]));
-                let right = f32::from_le_bytes(frame[4..8].try_into().unwrap_or([0; 4]));
-                let processed = data.eq.process_frame(left, right);
-                metrics.add_frame(processed.metrics);
-                if data.audio.slots() >= 2 {
-                    let _ = data.audio.push(processed.left);
-                    let _ = data.audio.push(processed.right);
-                }
-                let _ = data.analyzer.push((processed.left + processed.right) * 0.5);
-            }
-            data.telemetry.publish_audio(
-                metrics.input_peak,
-                metrics.output_peak,
-                metrics.clipped,
-                metrics.limited,
-            );
-        })
-        .register()?;
+    if filter.is_null() {
+        bail!("could not create PipeWire filter");
+    }
 
-    let _playback_listener = playback
-        .add_local_listener_with_user_data(PlaybackData {
-            audio: audio_consumer,
-            capture: capture.as_raw_ptr(),
-        })
-        .process(|stream, data| {
-            // The hardware playback graph provides the clock. Trigger the
-            // unlinked virtual sink once per cycle and consume its prior block.
-            // SAFETY: the capture stream is created before this listener and
-            // remains alive until after the listener is dropped on this loop.
-            unsafe {
-                pw::sys::pw_stream_trigger_process(data.capture);
-            }
-            let Some(mut buffer) = stream.dequeue_buffer() else {
-                return;
-            };
-            let Some(plane) = buffer.datas_mut().first_mut() else {
-                return;
-            };
-            let Some(bytes) = plane.data() else { return };
-            let frames = bytes.len() / 8;
-            let (frame_bytes, _) = bytes[..frames * 8].as_chunks_mut::<8>();
-            for frame in frame_bytes {
-                let left = data.audio.pop().unwrap_or(0.0);
-                let right = data.audio.pop().unwrap_or(0.0);
-                frame[0..4].copy_from_slice(&left.to_le_bytes());
-                frame[4..8].copy_from_slice(&right.to_le_bytes());
-            }
-            let chunk = plane.chunk_mut();
-            *chunk.offset_mut() = 0;
-            *chunk.stride_mut() = (mem::size_of::<f32>() * CHANNELS as usize) as i32;
-            *chunk.size_mut() = (frames * 8) as u32;
-        })
-        .register()?;
+    filter_data.input_left = add_filter_port(filter, true, "input_FL", "FL")?;
+    filter_data.input_right = add_filter_port(filter, true, "input_FR", "FR")?;
+    filter_data.output_left = add_filter_port(filter, false, "output_FL", "FL")?;
+    filter_data.output_right = add_filter_port(filter, false, "output_FR", "FR")?;
+    let connect_result = unsafe {
+        pw::sys::pw_filter_connect(
+            filter,
+            pw::sys::pw_filter_flags_PW_FILTER_FLAG_RT_PROCESS,
+            ptr::null_mut(),
+            0,
+        )
+    };
+    if connect_result < 0 {
+        unsafe { pw::sys::pw_filter_destroy(filter) };
+        bail!("could not connect PipeWire filter ({connect_result})");
+    }
 
-    let capture_format_bytes = audio_format_bytes();
-    let mut capture_format = [Pod::from_bytes(&capture_format_bytes)
-        .ok_or_else(|| anyhow!("could not build capture format"))?];
-    capture.connect(
-        spa::utils::Direction::Input,
-        None,
-        pw::stream::StreamFlags::MAP_BUFFERS
-            | pw::stream::StreamFlags::RT_PROCESS
-            | pw::stream::StreamFlags::TRIGGER,
-        &mut capture_format,
-    )?;
-    let playback_format_bytes = audio_format_bytes();
-    let mut playback_format = [Pod::from_bytes(&playback_format_bytes)
-        .ok_or_else(|| anyhow!("could not build playback format"))?];
-    playback.connect(
-        spa::utils::Direction::Output,
-        None,
-        pw::stream::StreamFlags::AUTOCONNECT
-            | pw::stream::StreamFlags::MAP_BUFFERS
-            | pw::stream::StreamFlags::RT_PROCESS,
-        &mut playback_format,
-    )?;
+    let mut loopback = Command::new("pw-loopback")
+        .args([
+            "--channels",
+            "2",
+            "--channel-map",
+            "[ FL FR ]",
+            "--latency",
+            "5",
+            "--capture-props",
+            "{ node.name = torroeq_sink node.description = \"TorroEQ Equalizer\" media.class = Audio/Sink node.virtual = true }",
+            "--playback",
+            "0",
+            "--playback-props",
+            "{ node.name = torroeq_feed node.description = \"TorroEQ Feed\" node.autoconnect = false node.passive = true }",
+        ])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .context("could not start PipeWire loopback")?;
+
+    let target = output.name.clone();
+    let linker = thread::spawn(move || {
+        thread::sleep(std::time::Duration::from_millis(400));
+        link_ports("torroeq_feed", "output_FL", "torroeq_filter", "input_FL");
+        link_ports("torroeq_feed", "output_FR", "torroeq_filter", "input_FR");
+        link_ports("torroeq_filter", "output_FL", &target, "playback_FL");
+        link_ports("torroeq_filter", "output_FR", &target, "playback_FR");
+    });
 
     let _stop_source = stop_receiver.attach(mainloop.loop_(), {
         let mainloop = mainloop.clone();
         move |_| mainloop.quit()
     });
-    telemetry.set_latency_ms(1_000.0 * 1_024.0 / SAMPLE_RATE as f32);
+    telemetry.set_latency_ms(5.0);
     telemetry.set_running(true);
     let _ = ready.send(Ok(()));
     mainloop.run();
     stop.store(true, Ordering::Release);
+    let _ = linker.join();
+    let _ = loopback.kill();
+    let _ = loopback.wait();
+    unsafe {
+        pw::sys::pw_filter_disconnect(filter);
+        pw::sys::pw_filter_destroy(filter);
+    }
     let _ = analyzer_thread.join();
     Ok(())
 }
 
-fn audio_format_bytes() -> Vec<u8> {
-    let mut info = spa::param::audio::AudioInfoRaw::new();
-    info.set_format(spa::param::audio::AudioFormat::F32LE);
-    info.set_rate(SAMPLE_RATE);
-    info.set_channels(CHANNELS);
-    let mut positions = [0; spa::param::audio::MAX_CHANNELS];
-    positions[0] = spa::sys::SPA_AUDIO_CHANNEL_FL;
-    positions[1] = spa::sys::SPA_AUDIO_CHANNEL_FR;
-    info.set_position(positions);
-    let object = spa::pod::Object {
-        type_: spa::utils::SpaTypes::ObjectParamFormat.as_raw(),
-        id: spa::param::ParamType::EnumFormat.as_raw(),
-        properties: info.into(),
+fn add_filter_port(
+    filter: *mut pw::sys::pw_filter,
+    input: bool,
+    name: &str,
+    channel: &str,
+) -> Result<*mut c_void> {
+    let direction = if input {
+        pw::spa::sys::SPA_DIRECTION_INPUT
+    } else {
+        pw::spa::sys::SPA_DIRECTION_OUTPUT
     };
-    spa::pod::serialize::PodSerializer::serialize(
-        std::io::Cursor::new(Vec::new()),
-        &spa::pod::Value::Object(object),
-    )
-    .expect("audio format serialization must succeed")
-    .0
-    .into_inner()
+    let port = unsafe {
+        pw::sys::pw_filter_add_port(
+            filter,
+            direction,
+            pw::sys::pw_filter_port_flags_PW_FILTER_PORT_FLAG_MAP_BUFFERS,
+            0,
+            properties! {
+                *pw::keys::FORMAT_DSP => "32 bit float mono audio",
+                *pw::keys::PORT_NAME => name,
+                *pw::keys::AUDIO_CHANNEL => channel,
+            }
+            .into_raw(),
+            ptr::null_mut(),
+            0,
+        )
+    };
+    if port.is_null() {
+        bail!("could not create PipeWire port {name}");
+    }
+    Ok(port)
+}
+
+fn link_ports(source_node: &str, source_port: &str, target_node: &str, target_port: &str) {
+    let source = format!("{source_node}:{source_port}");
+    let destination = format!("{target_node}:{target_port}");
+    for _ in 0..20 {
+        let linked = Command::new("pw-link")
+            .args([source.as_str(), destination.as_str()])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .is_ok_and(|status| status.success());
+        if linked {
+            return;
+        }
+        thread::sleep(std::time::Duration::from_millis(50));
+    }
 }

@@ -66,6 +66,8 @@ The recommended direction is **Studio**, with two alternatives for comparison:
 
 Open the SVG files directly in a browser or image viewer. See [`docs/design/README.md`](docs/design/README.md) for the rationale.
 
+The ten-band analyzer follows the segmented display language of Sony's late-1980s and 1990s equalizers. See [`docs/SONY_ANALYZER_DESIGN.md`](docs/SONY_ANALYZER_DESIGN.md) for the references and rendering decisions.
+
 ## Plan
 
 The phased implementation plan and key technical decisions are documented in [`docs/PLAN.md`](docs/PLAN.md).

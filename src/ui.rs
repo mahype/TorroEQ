@@ -2,11 +2,10 @@ use ratatui::Frame;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Alignment, Constraint, Direction, Layout, Margin, Rect};
 use ratatui::style::{Color, Modifier, Style, Stylize};
-use ratatui::symbols;
 use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{
     Block, BorderType, Borders, Clear, Gauge, List, ListItem, ListState, Padding, Paragraph,
-    Sparkline, Widget, Wrap,
+    Widget, Wrap,
 };
 
 use crate::app::{App, Dialog, ViewMode};
@@ -21,6 +20,10 @@ const PANEL: Color = Color::Rgb(23, 19, 21);
 const SELECTED: Color = Color::Rgb(52, 39, 43);
 const GREEN: Color = Color::Rgb(134, 207, 125);
 const AMBER: Color = Color::Rgb(236, 183, 85);
+const VFD: Color = Color::Rgb(92, 218, 207);
+const VFD_DIM: Color = Color::Rgb(35, 58, 59);
+const VFD_PEAK: Color = Color::Rgb(218, 244, 232);
+const SPECTRUM_FLOOR_DB: f32 = -48.0;
 
 pub fn render(frame: &mut Frame<'_>, app: &mut App) {
     let area = frame.area();
@@ -236,19 +239,14 @@ fn render_session(frame: &mut Frame<'_>, area: Rect, app: &mut App) {
 }
 
 fn render_spectrum(frame: &mut Frame<'_>, area: Rect, app: &App, focused: bool) {
-    let data = app
-        .telemetry
-        .spectrum
-        .iter()
-        .map(|db| (db + 72.0).clamp(0.0, 72.0) as u64)
-        .collect::<Vec<_>>();
+    frame.render_widget(panel(" 10-BAND ANALYZER  -48 ... 0 dBFS ", focused), area);
     frame.render_widget(
-        Sparkline::default()
-            .block(panel(" POST-EQ SPECTRUM  20 Hz ... 20 kHz ", focused))
-            .data(&data)
-            .style(Style::default().fg(ACCENT))
-            .absent_value_symbol(symbols::shade::LIGHT),
-        area,
+        SpectrumMeter {
+            levels: &app.telemetry.spectrum,
+            peaks: &app.telemetry.spectrum_peaks,
+            selected: app.selected_band,
+        },
+        area.inner(Margin::new(2, 1)),
     );
 }
 
@@ -447,6 +445,98 @@ struct Fader {
     gain: f32,
     enabled: bool,
     selected: bool,
+}
+
+struct SpectrumMeter<'a> {
+    levels: &'a [f32; BAND_COUNT],
+    peaks: &'a [f32; BAND_COUNT],
+    selected: usize,
+}
+
+impl Widget for SpectrumMeter<'_> {
+    fn render(self, area: Rect, buffer: &mut Buffer) {
+        if area.width < BAND_COUNT as u16 * 3 || area.height < 3 {
+            return;
+        }
+        let label_y = area.bottom() - 1;
+        let meter_height = area.height - 1;
+        let columns = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Ratio(1, BAND_COUNT as u32); BAND_COUNT])
+            .split(Rect::new(area.x, area.y, area.width, meter_height));
+
+        for (index, column) in columns.iter().copied().enumerate() {
+            let inset = u16::from(column.width >= 4);
+            let left = column.x + inset;
+            let right = column.right().saturating_sub(inset);
+            let level = self.levels[index].clamp(SPECTRUM_FLOOR_DB, 0.0);
+            let peak = self.peaks[index].clamp(SPECTRUM_FLOOR_DB, 0.0);
+            let lit_segments = db_to_segment(level, meter_height, true);
+            let peak_segment = db_to_segment(peak, meter_height, false);
+
+            for y in area.y..label_y {
+                let from_bottom = (label_y - 1 - y) as usize;
+                let active = from_bottom < lit_segments;
+                let segment_db = SPECTRUM_FLOOR_DB
+                    + (from_bottom + 1) as f32 / meter_height as f32 * -SPECTRUM_FLOOR_DB;
+                let color = if active {
+                    if segment_db > -3.0 {
+                        ACCENT
+                    } else if segment_db > -9.0 {
+                        AMBER
+                    } else {
+                        VFD
+                    }
+                } else {
+                    VFD_DIM
+                };
+                for x in left..right {
+                    buffer[(x, y)].set_symbol("▄").set_fg(color);
+                }
+            }
+
+            if peak > SPECTRUM_FLOOR_DB
+                && peak_segment >= lit_segments
+                && peak_segment < meter_height as usize
+            {
+                let peak_y = label_y - 1 - peak_segment as u16;
+                let marker_left = left + u16::from(right.saturating_sub(left) > 2);
+                let marker_right = right.saturating_sub(u16::from(right.saturating_sub(left) > 2));
+                for x in marker_left..marker_right {
+                    buffer[(x, peak_y)].set_symbol("-").set_fg(VFD_PEAK);
+                }
+            }
+
+            let label = format_frequency(BAND_FREQUENCIES[index]);
+            let label_x = column.x + column.width.saturating_sub(label.len() as u16) / 2;
+            buffer.set_string(
+                label_x,
+                label_y,
+                label,
+                Style::default()
+                    .fg(if index == self.selected {
+                        ACCENT
+                    } else {
+                        MUTED
+                    })
+                    .add_modifier(if index == self.selected {
+                        Modifier::BOLD
+                    } else {
+                        Modifier::empty()
+                    }),
+            );
+        }
+    }
+}
+
+fn db_to_segment(db: f32, height: u16, round_up: bool) -> usize {
+    let normalized = ((db - SPECTRUM_FLOOR_DB) / -SPECTRUM_FLOOR_DB).clamp(0.0, 1.0);
+    let segments = normalized * height as f32;
+    if round_up {
+        segments.ceil() as usize
+    } else {
+        segments.round().min(height.saturating_sub(1) as f32) as usize
+    }
 }
 
 impl Widget for Fader {

@@ -58,11 +58,15 @@ impl App {
         telemetry: TelemetrySnapshot,
     ) -> Self {
         let params = state.params.to_params(state.bypass);
-        let output_index = state
-            .output_name
-            .as_ref()
-            .and_then(|name| outputs.iter().position(|output| &output.name == name))
-            .or_else(|| outputs.iter().position(|output| output.is_default))
+        let output_index = outputs
+            .iter()
+            .position(|output| output.is_default)
+            .or_else(|| {
+                state
+                    .output_name
+                    .as_ref()
+                    .and_then(|name| outputs.iter().position(|output| &output.name == name))
+            })
             .unwrap_or(0);
         Self {
             selected_band: 0,
@@ -163,5 +167,46 @@ impl App {
     fn publish_change(&mut self) {
         self.shared_params.replace(self.params);
         self.dirty = true;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::storage::SavedState;
+    use crate::telemetry::Telemetry;
+
+    #[test]
+    fn current_default_output_wins_over_stale_saved_output() {
+        let state = SavedState {
+            output_name: Some("speakers".into()),
+            ..SavedState::default()
+        };
+        let outputs = vec![
+            OutputDevice {
+                id: 1,
+                name: "headphones".into(),
+                description: "Headphones".into(),
+                is_default: true,
+            },
+            OutputDevice {
+                id: 2,
+                name: "speakers".into(),
+                description: "Speakers".into(),
+                is_default: false,
+            },
+        ];
+
+        let app = App::new(
+            state,
+            vec![Preset::flat()],
+            outputs,
+            Telemetry::default().snapshot(),
+        );
+
+        assert_eq!(
+            app.selected_output().map(|output| output.name.as_str()),
+            Some("headphones")
+        );
     }
 }

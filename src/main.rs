@@ -70,21 +70,30 @@ fn check_audio() -> Result<()> {
     let telemetry = Arc::new(Telemetry::default());
     println!("Starting TorroEQ on {}...", output.description);
     let mut engine = AudioEngine::start(output, params, Arc::clone(&telemetry))?;
-    std::thread::sleep(Duration::from_millis(200));
+    std::thread::sleep(Duration::from_millis(700));
+    let graph = std::process::Command::new("pw-dump").output()?;
+    let registered = String::from_utf8_lossy(&graph.stdout).contains("torroeq_sink");
+    engine.activate()?;
+    std::thread::sleep(Duration::from_millis(100));
+    let routed = std::process::Command::new("pactl")
+        .arg("get-default-sink")
+        .output()?
+        .stdout
+        == b"torroeq_sink\n";
     let mut source = std::process::Command::new("pw-cat")
         .args([
             "--playback",
             "--raw",
             "--target",
             "torroeq_sink",
+            "--latency",
+            "10ms",
             "--format",
             "f32",
             "--rate",
             "48000",
             "--channels",
             "2",
-            "--sample-count",
-            "9600",
             "-",
         ])
         .stdin(Stdio::piped())
@@ -92,10 +101,15 @@ fn check_audio() -> Result<()> {
         .stderr(Stdio::null())
         .spawn()?;
     if let Some(stdin) = source.stdin.as_mut() {
-        for frame in 0..4_800 {
-            let sample = (2.0 * std::f32::consts::PI * 440.0 * frame as f32 / 48_000.0).sin() * 0.1;
-            stdin.write_all(&sample.to_le_bytes())?;
-            stdin.write_all(&sample.to_le_bytes())?;
+        for block in 0..50 {
+            for offset in 0..480 {
+                let frame = block * 480 + offset;
+                let sample =
+                    (2.0 * std::f32::consts::PI * 440.0 * frame as f32 / 48_000.0).sin() * 0.1;
+                stdin.write_all(&sample.to_le_bytes())?;
+                stdin.write_all(&sample.to_le_bytes())?;
+            }
+            std::thread::sleep(Duration::from_millis(10));
         }
     }
     drop(source.stdin.take());
@@ -103,14 +117,6 @@ fn check_audio() -> Result<()> {
     let _ = source.kill();
     let _ = source.wait();
     let snapshot = telemetry.snapshot();
-    let graph = std::process::Command::new("pw-dump").output()?;
-    let registered = String::from_utf8_lossy(&graph.stdout).contains("torroeq_sink");
-    engine.activate()?;
-    let routed = std::process::Command::new("pactl")
-        .arg("get-default-sink")
-        .output()?
-        .stdout
-        == b"torroeq_sink\n";
     engine.deactivate()?;
     engine.stop();
     if !snapshot.running || !registered || !routed || snapshot.input_peak < 0.05 {
@@ -166,7 +172,7 @@ fn run(
         app.telemetry = telemetry.snapshot();
         terminal.draw(|frame| ui::render(frame, app))?;
 
-        if event::poll(Duration::from_millis(33))? {
+        if event::poll(Duration::from_millis(16))? {
             match event::read()? {
                 Event::Key(key) if key.kind == KeyEventKind::Press => {
                     handle_key(app, key, storage)?;

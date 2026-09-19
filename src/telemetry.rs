@@ -1,7 +1,7 @@
 use std::array;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
-pub const SPECTRUM_BINS: usize = 96;
+pub const SPECTRUM_BINS: usize = 10;
 
 pub struct Telemetry {
     input_peak: AtomicU32,
@@ -11,6 +11,7 @@ pub struct Telemetry {
     limited: AtomicBool,
     running: AtomicBool,
     spectrum: [AtomicU32; SPECTRUM_BINS],
+    spectrum_peaks: [AtomicU32; SPECTRUM_BINS],
 }
 
 impl Default for Telemetry {
@@ -23,6 +24,7 @@ impl Default for Telemetry {
             limited: AtomicBool::new(false),
             running: AtomicBool::new(false),
             spectrum: array::from_fn(|_| AtomicU32::new((-72.0_f32).to_bits())),
+            spectrum_peaks: array::from_fn(|_| AtomicU32::new((-72.0_f32).to_bits())),
         }
     }
 }
@@ -37,8 +39,11 @@ impl Telemetry {
         self.limited.store(limited, Ordering::Relaxed);
     }
 
-    pub fn publish_spectrum(&self, bins: &[f32; SPECTRUM_BINS]) {
+    pub fn publish_spectrum(&self, bins: &[f32; SPECTRUM_BINS], peaks: &[f32; SPECTRUM_BINS]) {
         for (target, value) in self.spectrum.iter().zip(bins) {
+            target.store(value.to_bits(), Ordering::Relaxed);
+        }
+        for (target, value) in self.spectrum_peaks.iter().zip(peaks) {
             target.store(value.to_bits(), Ordering::Relaxed);
         }
     }
@@ -61,6 +66,9 @@ impl Telemetry {
             limited: self.limited.load(Ordering::Relaxed),
             running: self.running.load(Ordering::Acquire),
             spectrum: array::from_fn(|i| f32::from_bits(self.spectrum[i].load(Ordering::Relaxed))),
+            spectrum_peaks: array::from_fn(|i| {
+                f32::from_bits(self.spectrum_peaks[i].load(Ordering::Relaxed))
+            }),
         }
     }
 }
@@ -74,4 +82,5 @@ pub struct TelemetrySnapshot {
     pub limited: bool,
     pub running: bool,
     pub spectrum: [f32; SPECTRUM_BINS],
+    pub spectrum_peaks: [f32; SPECTRUM_BINS],
 }
