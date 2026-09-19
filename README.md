@@ -2,16 +2,59 @@
 
 A precise, keyboard-first system equalizer for PipeWire, designed as a polished terminal user interface.
 
-TorroEQ is currently in the design phase. The repository contains the product plan, technical architecture, and three interface studies that establish the direction before audio processing begins.
-
 ## Product direction
 
-- Ten-band graphic equalizer from 31 Hz to 16 kHz
-- Real-time spectrum analyzer from 20 Hz to 20 kHz
+- Ten-band graphic equalizer from 31 Hz to 16 kHz with 0.5 dB steps
+- Real-time 4096-point FFT spectrum analyzer from 20 Hz to 20 kHz
 - Keyboard and mouse operation
-- System-wide PipeWire processing with a bypass that remains safe
-- Presets, per-output profiles, and clipping protection
+- Native system-wide PipeWire processing and explicit safe activation
+- Presets, output selection, preamp, bypass, and clipping protection
 - A restrained visual language shared with TorroMail
+
+## Requirements
+
+- Linux with PipeWire, WirePlumber, and `pactl`
+- Rust 1.80 or newer when building from source
+- A true-color terminal; minimum supported size is 72 x 22
+
+## Build and run
+
+```bash
+cargo build --release
+./target/release/torroeq
+```
+
+TorroEQ creates a virtual `TorroEQ Equalizer` sink but does not reroute the system without consent. Press `a` in the TUI to make it the default sink. The previous default is restored when TorroEQ exits cleanly.
+
+Useful diagnostics:
+
+```bash
+cargo run -- --list-outputs
+cargo run -- --check-audio
+cargo run -- --demo
+```
+
+`--check-audio` registers the virtual sink, passes a short generated signal through the complete processing path, verifies default-route activation, restores the prior output, and exits.
+
+## Controls
+
+| Action | Keys | Mouse |
+|---|---|---|
+| Select band | Left/Right or `h`/`l` | Click |
+| Adjust gain | Up/Down or `j`/`k` | Wheel |
+| Coarse adjustment | Page Up/Page Down | Shift+wheel |
+| Reset band | `0` | Right-click |
+| Enable band | Space | - |
+| Activate system routing | `a` | - |
+| Global bypass | `b` | Click |
+| Limiter | `m` | - |
+| Preamp | `[` / `]` | - |
+| Presets / outputs | `p` / `o` | Click |
+| Save preset | `s` | - |
+| Studio / focus view | `v` | - |
+| Help / quit | `?` / `q` | - |
+
+Configuration follows the XDG base-directory convention. Session state is stored below `~/.local/state/torroeq`; user presets are stored below `~/.local/share/torroeq/presets`.
 
 ## Design studies
 
@@ -27,6 +70,6 @@ Open the SVG files directly in a browser or image viewer. See [`docs/design/READ
 
 The phased implementation plan and key technical decisions are documented in [`docs/PLAN.md`](docs/PLAN.md).
 
-## Status
+## Architecture
 
-Planning scaffold only. No audio is modified yet.
+The audio callback owns the DSP state and performs no allocation, filesystem access, or locking. UI parameters are read through a lock-free coherent snapshot. FFT analysis runs on a separate worker and may drop visualization samples rather than delay audio. See [`docs/PLAN.md`](docs/PLAN.md) for the complete rationale and safety model.

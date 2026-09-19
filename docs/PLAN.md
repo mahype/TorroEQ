@@ -1,5 +1,9 @@
 # TorroEQ implementation plan
 
+## Implementation status
+
+The first end-to-end version is implemented. It includes the Studio and Focus views, keyboard and mouse control, XDG state and presets, output discovery, a lock-free ten-band DSP core, limiter, FFT analyzer, a native PipeWire virtual sink, explicit system-route activation, and a signal-path diagnostic. The remaining production-hardening work is long-duration dropout testing, device hot-plug recovery, and packaging.
+
 ## 1. Product goal
 
 TorroEQ is a system-wide ten-band equalizer and spectrum analyzer for Linux terminals. It should feel immediate enough for live adjustment, remain safe when the UI exits unexpectedly, and fit naturally beside TorroMail as part of the same product family.
@@ -40,7 +44,7 @@ The application opens in the Studio layout. The selected control has a red borde
 | Select band | Left/Right or `h`/`l` | Click fader |
 | Fine adjustment | Up/Down or `j`/`k` | Wheel |
 | Coarse adjustment | Page Up/Page Down | Shift+wheel |
-| Reset selected band | `0` | Double-click |
+| Reset selected band | `0` | Right-click |
 | Toggle selected band | Space | Click band label |
 | Toggle global bypass | `b` | Click Bypass |
 | Choose preset | `p` | Click preset field |
