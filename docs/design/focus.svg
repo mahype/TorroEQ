@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900">
+  <defs>
+    <linearGradient id="brand2" x1="0" x2="1"><stop stop-color="#D50C0C"/><stop offset="1" stop-color="#A50A0A"/></linearGradient>
+    <linearGradient id="fill2" x1="0" y1="1" x2="0" y2="0"><stop stop-color="#D50C0C" stop-opacity=".04"/><stop offset="1" stop-color="#EE3A33" stop-opacity=".45"/></linearGradient>
+    <filter id="glow2"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <style>.t{font-family:'JetBrains Mono','DejaVu Sans Mono',monospace;fill:#E9E4E5}.m{fill:#978A8D}.f{fill:#6A5E61}.r{fill:#EE3A33}.g{fill:#86CF7D}.a{fill:#ECB755}.s{font-size:14px}.b{font-size:16px}.v{font-size:21px;font-weight:700}.h{font-size:22px;font-weight:800}.l{font-size:13px;letter-spacing:1px}.p{fill:#171315;stroke:#5A4C50}.grid{stroke:#34272B;stroke-width:1}</style>
+  </defs>
+  <rect width="1440" height="900" fill="#0E0E0F"/><rect x="18" y="18" width="1404" height="864" rx="16" fill="#120F10" stroke="#3D3135"/>
+  <path d="M34 18h1372a16 16 0 0 1 16 16v56H18V34a16 16 0 0 1 16-16z" fill="url(#brand2)"/>
+  <text x="48" y="64" class="t h" fill="#fff">TORRO<tspan fill="#C4C3C3">EQ</tspan></text><text x="720" y="61" text-anchor="middle" class="t s" fill="#fff">FOCUS VIEW</text><text x="1384" y="61" text-anchor="end" class="t s" fill="#fff">Warm detail  *</text>
+
+  <rect x="38" y="110" width="1364" height="500" rx="10" class="p"/>
+  <text x="64" y="145" class="t l m">LIVE SPECTRUM</text><text x="1375" y="145" text-anchor="end" class="t s m">POST-EQ / HOLD OFF</text>
+  <g class="grid"><line x1="84" y1="190" x2="1365" y2="190"/><line x1="84" y1="265" x2="1365" y2="265"/><line x1="84" y1="340" x2="1365" y2="340"/><line x1="84" y1="415" x2="1365" y2="415"/><line x1="84" y1="490" x2="1365" y2="490"/><line x1="84" y1="565" x2="1365" y2="565"/></g>
+  <g class="t f s"><text x="50" y="194">0</text><text x="42" y="269">-12</text><text x="42" y="344">-24</text><text x="42" y="419">-36</text><text x="42" y="494">-48</text><text x="42" y="569">-60</text></g>
+  <path d="M84 565 C130 550 170 558 220 520 S300 445 345 472 S430 521 485 432 S580 389 640 408 S730 455 790 365 S900 315 960 351 S1060 416 1120 310 S1240 349 1290 282 S1340 320 1365 298 L1365 565H84Z" fill="url(#fill2)"/>
+  <path d="M84 565 C130 550 170 558 220 520 S300 445 345 472 S430 521 485 432 S580 389 640 408 S730 455 790 365 S900 315 960 351 S1060 416 1120 310 S1240 349 1290 282 S1340 320 1365 298" fill="none" stroke="#EE3A33" stroke-width="3" filter="url(#glow2)"/>
+  <path d="M84 420 C230 419 300 410 440 415 S660 385 790 369 S980 336 1120 322 S1280 300 1365 296" fill="none" stroke="#ECB755" stroke-width="2" stroke-dasharray="8 8"/>
+  <line x1="1030" y1="174" x2="1030" y2="565" stroke="#79BFD3" stroke-width="1" stroke-dasharray="3 5"/><circle cx="1030" cy="337" r="5" fill="#79BFD3"/>
+  <rect x="1044" y="178" width="196" height="58" rx="7" fill="#1F1A1C" stroke="#5A4C50"/><text x="1062" y="201" class="t s m">SELECTED</text><text x="1062" y="224" class="t b">4.0 kHz  <tspan fill="#EE3A33">+1.5 dB</tspan></text>
+  <g class="t f s"><text x="84" y="592">20</text><text x="250" y="592">62</text><text x="420" y="592">250</text><text x="600" y="592">1k</text><text x="790" y="592">4k</text><text x="1000" y="592">10k</text><text x="1320" y="592">20k Hz</text></g>
+
+  <rect x="38" y="630" width="1364" height="172" rx="10" fill="#171315" stroke="#EE3A33" stroke-width="2"/>
+  <rect x="62" y="654" width="172" height="124" rx="8" fill="#211A1D"/>
+  <text x="82" y="680" class="t l r">ACTIVE BAND</text><text x="82" y="722" class="t" font-size="34" font-weight="800">4.0 kHz</text><text x="82" y="754" class="t s m">presence / detail</text>
+  <text x="274" y="671" class="t s m">GAIN</text><text x="274" y="737" class="t" font-size="46" font-weight="800">+1.5<tspan class="m" font-size="18"> dB</tspan></text>
+  <rect x="520" y="699" width="540" height="8" rx="4" fill="#3D3135"/><rect x="790" y="699" width="65" height="8" rx="4" fill="#EE3A33"/><circle cx="855" cy="703" r="13" fill="#E9E4E5"/>
+  <g class="t f s" text-anchor="middle"><text x="520" y="733">-12</text><text x="655" y="733">-6</text><text x="790" y="733">0</text><text x="925" y="733">+6</text><text x="1060" y="733">+12</text></g>
+  <rect x="1100" y="655" width="128" height="54" rx="7" fill="#34272B"/><text x="1164" y="687" text-anchor="middle" class="t b">ENABLED</text>
+  <rect x="1242" y="655" width="136" height="54" rx="7" fill="#211A1D" stroke="#5A4C50"/><text x="1310" y="687" text-anchor="middle" class="t b m">RESET  0</text>
+  <text x="1100" y="754" class="t s m">HEADROOM</text><text x="1378" y="754" text-anchor="end" class="t s g">6.8 dB  ●</text>
+
+  <rect x="38" y="822" width="1364" height="42" rx="8" fill="#1A1517"/>
+  <g class="t s"><text x="62" y="848"><tspan class="m">band</tspan>  h/l</text><text x="194" y="848"><tspan class="m">gain</tspan>  j/k</text><text x="323" y="848"><tspan class="m">fine</tspan>  shift</text><text x="473" y="848"><tspan class="m">toggle</tspan>  space</text><text x="649" y="848"><tspan class="m">view</tspan>  v</text><text x="765" y="848"><tspan class="m">bypass</tspan>  b</text><text x="913" y="848"><tspan class="m">preset</tspan>  p</text><text x="1372" y="848" text-anchor="end"><tspan class="m">quit</tspan>  q</text></g>
+</svg>

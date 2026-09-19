@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900">
+  <defs>
+    <linearGradient id="rack" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#211B1D"/><stop offset="1" stop-color="#100D0E"/></linearGradient>
+    <linearGradient id="red3" x1="0" x2="1"><stop stop-color="#D50C0C"/><stop offset="1" stop-color="#A50A0A"/></linearGradient>
+    <filter id="glow3"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <style>.t{font-family:'JetBrains Mono','DejaVu Sans Mono',monospace;fill:#E9E4E5}.m{fill:#978A8D}.f{fill:#6A5E61}.r{fill:#EE3A33}.g{fill:#86CF7D}.a{fill:#ECB755}.s{font-size:14px}.b{font-size:16px}.h{font-size:22px;font-weight:800}.l{font-size:12px;letter-spacing:2px}.panel{fill:url(#rack);stroke:#5A4C50;stroke-width:1}</style>
+  </defs>
+  <rect width="1440" height="900" fill="#0A0909"/><rect x="18" y="18" width="1404" height="864" rx="12" fill="#100D0E" stroke="#5A4C50" stroke-width="2"/>
+  <circle cx="42" cy="43" r="6" fill="#3D3135"/><circle cx="1398" cy="43" r="6" fill="#3D3135"/><circle cx="42" cy="857" r="6" fill="#3D3135"/><circle cx="1398" cy="857" r="6" fill="#3D3135"/>
+  <rect x="38" y="34" width="1364" height="68" rx="5" fill="url(#red3)"/>
+  <text x="64" y="76" class="t h" fill="#fff">TORRO<tspan fill="#C4C3C3">EQ</tspan></text><text x="720" y="75" text-anchor="middle" class="t l" fill="#fff">TEN BAND DIGITAL GRAPHIC EQUALIZER</text>
+  <circle cx="1326" cy="67" r="11" fill="#86CF7D" filter="url(#glow3)"/><text x="1350" y="73" class="t s" fill="#fff">POWER</text>
+
+  <rect x="38" y="122" width="1364" height="132" rx="6" class="panel"/>
+  <text x="62" y="153" class="t l m">REALTIME ANALYZER</text>
+  <g stroke="#34272B"><line x1="244" y1="145" x2="244" y2="232"/><line x1="354" y1="145" x2="354" y2="232"/><line x1="464" y1="145" x2="464" y2="232"/><line x1="574" y1="145" x2="574" y2="232"/><line x1="684" y1="145" x2="684" y2="232"/><line x1="794" y1="145" x2="794" y2="232"/><line x1="904" y1="145" x2="904" y2="232"/><line x1="1014" y1="145" x2="1014" y2="232"/><line x1="1124" y1="145" x2="1124" y2="232"/></g>
+  <g fill="#EE3A33"><rect x="144" y="207" width="74" height="25"/><rect x="254" y="194" width="74" height="38"/><rect x="364" y="176" width="74" height="56"/><rect x="474" y="186" width="74" height="46"/><rect x="584" y="162" width="74" height="70"/><rect x="694" y="182" width="74" height="50"/><rect x="804" y="153" width="74" height="79"/><rect x="914" y="169" width="74" height="63"/><rect x="1024" y="158" width="74" height="74"/><rect x="1134" y="180" width="74" height="52"/></g>
+  <g fill="#ECB755"><rect x="144" y="207" width="74" height="4"/><rect x="254" y="194" width="74" height="4"/><rect x="364" y="176" width="74" height="4"/><rect x="474" y="186" width="74" height="4"/><rect x="584" y="162" width="74" height="4"/><rect x="694" y="182" width="74" height="4"/><rect x="804" y="153" width="74" height="4"/><rect x="914" y="169" width="74" height="4"/><rect x="1024" y="158" width="74" height="4"/><rect x="1134" y="180" width="74" height="4"/></g>
+  <rect x="1244" y="148" width="130" height="80" rx="4" fill="#0D0B0C" stroke="#5A4C50"/><text x="1260" y="169" class="t s m">STEREO PEAK</text><rect x="1260" y="182" width="96" height="7" fill="#3D3135"/><rect x="1260" y="182" width="76" height="7" fill="#86CF7D"/><rect x="1260" y="202" width="96" height="7" fill="#3D3135"/><rect x="1260" y="202" width="69" height="7" fill="#86CF7D"/><text x="1360" y="190" class="t f s">L</text><text x="1360" y="210" class="t f s">R</text>
+
+  <rect x="38" y="274" width="1038" height="456" rx="6" class="panel"/>
+  <text x="62" y="306" class="t l m">FREQUENCY / Hz</text><text x="1048" y="306" text-anchor="end" class="t s m">+12</text><text x="1048" y="509" text-anchor="end" class="t s m">0</text><text x="1048" y="705" text-anchor="end" class="t s m">-12</text>
+  <line x1="72" y1="505" x2="1034" y2="505" stroke="#5A4C50" stroke-dasharray="5 5"/>
+  <g stroke="#3D3135" stroke-width="8" stroke-linecap="round"><line x1="128" y1="342" x2="128" y2="674"/><line x1="222" y1="342" x2="222" y2="674"/><line x1="316" y1="342" x2="316" y2="674"/><line x1="410" y1="342" x2="410" y2="674"/><line x1="504" y1="342" x2="504" y2="674"/><line x1="598" y1="342" x2="598" y2="674"/><line x1="692" y1="342" x2="692" y2="674"/><line x1="786" y1="342" x2="786" y2="674"/><line x1="880" y1="342" x2="880" y2="674"/><line x1="974" y1="342" x2="974" y2="674"/></g>
+  <g fill="#C4C3C3" stroke="#0E0E0F" stroke-width="2"><rect x="108" y="536" width="40" height="18" rx="3"/><rect x="202" y="498" width="40" height="18" rx="3"/><rect x="296" y="465" width="40" height="18" rx="3"/><rect x="390" y="486" width="40" height="18" rx="3"/><rect x="484" y="509" width="40" height="18" rx="3"/><rect x="578" y="449" width="40" height="18" rx="3"/><rect x="672" y="422" width="40" height="18" rx="3"/><rect x="766" y="481" width="40" height="18" rx="3"/><rect x="860" y="452" width="40" height="18" rx="3"/><rect x="954" y="492" width="40" height="18" rx="3"/></g>
+  <rect x="754" y="326" width="64" height="370" rx="5" fill="none" stroke="#EE3A33" stroke-width="2"/>
+  <g class="t s" text-anchor="middle"><text x="128" y="715">31</text><text x="222" y="715">62</text><text x="316" y="715">125</text><text x="410" y="715">250</text><text x="504" y="715">500</text><text x="598" y="715">1k</text><text x="692" y="715">2k</text><text x="786" y="715" class="r">4k</text><text x="880" y="715">8k</text><text x="974" y="715">16k</text></g>
+
+  <rect x="1096" y="274" width="306" height="456" rx="6" class="panel"/>
+  <text x="1120" y="306" class="t l m">CONTROL</text>
+  <text x="1120" y="350" class="t s m">PREAMP</text><text x="1372" y="350" text-anchor="end" class="t b">-3.0 dB</text><rect x="1120" y="366" width="252" height="7" rx="3" fill="#3D3135"/><rect x="1120" y="366" width="142" height="7" rx="3" fill="#EE3A33"/>
+  <text x="1120" y="420" class="t s m">PRESET</text><rect x="1118" y="434" width="256" height="44" rx="5" fill="#34272B"/><rect x="1118" y="434" width="4" height="44" fill="#EE3A33"/><text x="1138" y="462" class="t b">Warm detail</text>
+  <text x="1120" y="525" class="t s m">OUTPUT</text><text x="1120" y="551" class="t b">USB S/PDIF</text><text x="1372" y="551" text-anchor="end" class="t g">●</text>
+  <rect x="1118" y="588" width="122" height="62" rx="5" fill="#34272B" stroke="#EE3A33"/><text x="1179" y="613" text-anchor="middle" class="t s r">BYPASS</text><text x="1179" y="638" text-anchor="middle" class="t b">OFF</text>
+  <rect x="1252" y="588" width="122" height="62" rx="5" fill="#171315" stroke="#5A4C50"/><text x="1313" y="613" text-anchor="middle" class="t s m">LIMITER</text><text x="1313" y="638" text-anchor="middle" class="t b g">ON</text>
+  <text x="1120" y="690" class="t s m">HEADROOM</text><text x="1372" y="690" text-anchor="end" class="t b g">6.8 dB</text>
+
+  <rect x="38" y="752" width="1364" height="50" rx="6" class="panel"/><text x="62" y="783" class="t s m">STATUS</text><circle cx="148" cy="777" r="5" fill="#86CF7D"/><text x="164" y="783" class="t s">ENGINE LOCKED</text><text x="356" y="783" class="t s m">48 kHz</text><text x="450" y="783" class="t s m">5.3 ms</text><text x="1374" y="783" text-anchor="end" class="t s">4.0 kHz  <tspan class="r">+1.5 dB</tspan></text>
+  <rect x="38" y="822" width="1364" height="42" rx="6" fill="#1A1517"/><g class="t s"><text x="62" y="848"><tspan class="m">select</tspan> h/l</text><text x="210" y="848"><tspan class="m">gain</tspan> j/k</text><text x="342" y="848"><tspan class="m">reset</tspan> 0</text><text x="468" y="848"><tspan class="m">bypass</tspan> b</text><text x="610" y="848"><tspan class="m">preset</tspan> p</text><text x="744" y="848"><tspan class="m">output</tspan> o</text><text x="1372" y="848" text-anchor="end"><tspan class="m">quit</tspan> q</text></g>
+</svg>
