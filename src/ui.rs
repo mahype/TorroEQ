@@ -1,7 +1,7 @@
 use ratatui::Frame;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Alignment, Constraint, Direction, Layout, Margin, Rect};
-use ratatui::style::{Color, Modifier, Style, Stylize};
+use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{
     Block, BorderType, Borders, Clear, Gauge, List, ListItem, ListState, Padding, Paragraph,
@@ -39,9 +39,9 @@ pub fn render(frame: &mut Frame<'_>, app: &mut App) {
     let rows = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),
+            Constraint::Length(1),
             Constraint::Min(16),
-            Constraint::Length(2),
+            Constraint::Length(1),
         ])
         .split(area);
     render_header(frame, rows[0], app);
@@ -96,7 +96,7 @@ fn render_studio(frame: &mut Frame<'_>, area: Rect, app: &mut App) {
     let columns = if wide {
         Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([Constraint::Length(30), Constraint::Min(42)])
+            .constraints([Constraint::Length(26), Constraint::Min(42)])
             .split(area)
     } else {
         Layout::default()
@@ -116,17 +116,20 @@ fn render_studio(frame: &mut Frame<'_>, area: Rect, app: &mut App) {
 }
 
 fn render_session(frame: &mut Frame<'_>, area: Rect, app: &mut App) {
-    let inner = panel(" SESSION ", false).inner(area);
-    frame.render_widget(panel(" SESSION ", false), area);
+    let block = panel(" SESSION ", false);
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
     let rows = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(4),
-            Constraint::Length(4),
-            Constraint::Length(3),
-            Constraint::Length(3),
-            Constraint::Length(3),
-            Constraint::Min(2),
+            Constraint::Length(2),
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Min(4),
         ])
         .split(inner);
 
@@ -134,51 +137,52 @@ fn render_session(frame: &mut Frame<'_>, area: Rect, app: &mut App) {
     app.hit_regions.preset = rows[1];
     frame.render_widget(
         Paragraph::new(vec![
-            Line::styled("OUTPUT", Style::default().fg(MUTED)),
-            Line::from(
-                app.selected_output()
-                    .map_or("No output", |o| &o.description),
-            ),
+            Line::styled(" OUTPUT", Style::default().fg(MUTED)),
+            Line::from(vec![
+                Span::raw(" "),
+                Span::raw(
+                    app.selected_output()
+                        .map_or("No output", |o| o.description.as_str()),
+                ),
+            ]),
         ]),
         rows[0],
     );
     frame.render_widget(
-        Paragraph::new(vec![
-            Line::styled("PRESET", Style::default().fg(MUTED)),
-            Line::from(vec![
-                Span::styled("▌ ", Style::default().fg(ACCENT)),
-                Span::raw(&app.preset_name),
-                Span::styled(
-                    if app.dirty { " *" } else { "" },
-                    Style::default().fg(AMBER),
-                ),
-            ]),
-        ])
+        Paragraph::new(Line::from(vec![
+            Span::styled("▌ ", Style::default().fg(ACCENT)),
+            Span::styled("PRESET  ", Style::default().fg(MUTED)),
+            Span::styled(&app.preset_name, Style::default().bold()),
+            Span::styled(
+                if app.dirty { " *" } else { "" },
+                Style::default().fg(AMBER),
+            ),
+        ]))
         .style(Style::default().bg(SELECTED)),
         rows[1],
     );
     frame.render_widget(
         Paragraph::new(Line::from(vec![
-            Span::styled("PREAMP  ", Style::default().fg(MUTED)),
+            Span::styled(" PREAMP  ", Style::default().fg(MUTED)),
             Span::styled(
                 format!("{:+.1} dB", app.params.preamp_db),
                 Style::default().bold(),
             ),
         ])),
-        rows[2],
+        rows[3],
     );
     let headroom = suggested_headroom(app);
     frame.render_widget(
         Gauge::default()
-            .block(Block::default().title("HEADROOM".fg(MUTED)))
             .gauge_style(Style::default().fg(if headroom > 0.0 { GREEN } else { AMBER }))
             .ratio(((headroom + 12.0) / 24.0).clamp(0.0, 1.0) as f64)
-            .label(format!("{headroom:.1} dB")),
-        rows[3],
+            .label(format!("HEADROOM  {headroom:.1} dB")),
+        rows[4],
     );
-    app.hit_regions.bypass = rows[4];
+    app.hit_regions.bypass = rows[5];
     frame.render_widget(
         Paragraph::new(Line::from(vec![
+            Span::raw(" "),
             Span::styled(
                 if app.params.bypass { "○" } else { "●" },
                 Style::default().fg(if app.params.bypass { AMBER } else { GREEN }),
@@ -189,14 +193,8 @@ fn render_session(frame: &mut Frame<'_>, area: Rect, app: &mut App) {
                 " EQ ACTIVE"
             }),
             Span::styled("  [b]", Style::default().fg(MUTED)),
-        ]))
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .padding(Padding::horizontal(1))
-                .border_style(Style::default().fg(BORDER)),
-        ),
-        rows[4],
+        ])),
+        rows[5],
     );
     let status = if app.telemetry.clipped {
         ("▲ CLIPPING", ACCENT)
@@ -233,7 +231,7 @@ fn render_session(frame: &mut Frame<'_>, area: Rect, app: &mut App) {
                 Style::default().fg(if app.route_active { GREEN } else { AMBER }),
             ),
         ]),
-        rows[5],
+        rows[7],
     );
 }
 
@@ -384,7 +382,7 @@ fn render_dialog(frame: &mut Frame<'_>, area: Rect, dialog: &Dialog, app: &App) 
             ]);
             frame.render_widget(
                 Paragraph::new(help)
-                    .block(panel(" HELP  [?] ", true))
+                    .block(dialog_panel(" HELP  [?] "))
                     .wrap(Wrap { trim: false }),
                 modal,
             );
@@ -398,7 +396,7 @@ fn render_dialog(frame: &mut Frame<'_>, area: Rect, dialog: &Dialog, app: &App) 
             let mut state = ListState::default().with_selected(Some(*selected));
             frame.render_stateful_widget(
                 List::new(items)
-                    .block(panel(" PRESETS  [Enter] apply ", true))
+                    .block(dialog_panel(" PRESETS  [Enter] apply "))
                     .highlight_style(Style::default().bg(SELECTED).fg(ACCENT).bold())
                     .highlight_symbol("▌ "),
                 modal,
@@ -414,7 +412,7 @@ fn render_dialog(frame: &mut Frame<'_>, area: Rect, dialog: &Dialog, app: &App) 
             let mut state = ListState::default().with_selected(Some(*selected));
             frame.render_stateful_widget(
                 List::new(items)
-                    .block(panel(" OUTPUTS  [Enter] connect ", true))
+                    .block(dialog_panel(" OUTPUTS  [Enter] connect "))
                     .highlight_style(Style::default().bg(SELECTED).fg(ACCENT).bold())
                     .highlight_symbol("▌ "),
                 modal,
@@ -427,12 +425,12 @@ fn render_dialog(frame: &mut Frame<'_>, area: Rect, dialog: &Dialog, app: &App) 
                 Line::styled(format!("> {name}_"), Style::default().fg(ACCENT).bold()),
                 Line::styled("Enter to save / Esc to cancel", Style::default().fg(MUTED)),
             ])
-            .block(panel(" SAVE PRESET ", true)),
+            .block(dialog_panel(" SAVE PRESET ")),
             modal,
         ),
         Dialog::Error(message) => frame.render_widget(
             Paragraph::new(message.as_str())
-                .block(panel(" ERROR ", true))
+                .block(dialog_panel(" ERROR "))
                 .wrap(Wrap { trim: true }),
             modal,
         ),
@@ -615,9 +613,12 @@ fn panel<'a>(title: &'a str, focused: bool) -> Block<'a> {
         .title(title)
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
-        .padding(Padding::horizontal(1))
         .border_style(Style::default().fg(if focused { ACCENT } else { BORDER }))
         .style(Style::default().bg(PANEL))
+}
+
+fn dialog_panel(title: &str) -> Block<'_> {
+    panel(title, true).padding(Padding::horizontal(1))
 }
 
 fn centered(area: Rect, width: u16, height: u16) -> Rect {

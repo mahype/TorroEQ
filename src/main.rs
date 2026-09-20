@@ -47,7 +47,7 @@ fn main() -> Result<()> {
     let mut engine = if demo {
         None
     } else {
-        start_audio(&mut app, Arc::clone(&telemetry))
+        start_audio(&mut app, Arc::clone(&telemetry), true)
     };
 
     let mut terminal = setup_terminal()?;
@@ -184,11 +184,11 @@ fn run(
 
         if app.audio_restart_requested {
             app.audio_restart_requested = false;
-            app.route_active = false;
+            let reactivate = engine.as_ref().is_some_and(AudioEngine::is_activated);
             if let Some(active) = engine.as_mut() {
                 active.stop();
             }
-            *engine = start_audio(app, Arc::clone(telemetry));
+            *engine = start_audio(app, Arc::clone(telemetry), reactivate);
         }
         if app.route_toggle_requested {
             app.route_toggle_requested = false;
@@ -208,13 +208,18 @@ fn run(
     Ok(())
 }
 
-fn start_audio(app: &mut App, telemetry: Arc<Telemetry>) -> Option<AudioEngine> {
+fn start_audio(app: &mut App, telemetry: Arc<Telemetry>, activate: bool) -> Option<AudioEngine> {
     let Some(output) = app.selected_output().cloned() else {
         app.dialog = Some(Dialog::Error("No PipeWire audio output found.".into()));
         return None;
     };
     match AudioEngine::start(output, Arc::clone(&app.shared_params), telemetry) {
-        Ok(engine) => {
+        Ok(mut engine) => {
+            if activate && let Err(error) = engine.activate() {
+                app.dialog = Some(Dialog::Error(format!(
+                    "Audio routing could not be activated:\n{error:#}"
+                )));
+            }
             app.route_active = engine.is_activated();
             Some(engine)
         }

@@ -24,7 +24,7 @@ cargo build --release
 ./target/release/torroeq
 ```
 
-TorroEQ creates a virtual `TorroEQ Equalizer` sink but does not reroute the system without consent. Press `a` in the TUI to make it the default sink and move streams already playing on the selected output through the equalizer. The previous default and those streams are restored when TorroEQ exits cleanly.
+TorroEQ creates a virtual `TorroEQ Equalizer` sink, makes it the default, and moves streams already playing on the selected output through the equalizer. Press `a` in the TUI to disable or re-enable system routing. The previous default and those streams are restored when TorroEQ exits cleanly.
 
 Useful diagnostics:
 

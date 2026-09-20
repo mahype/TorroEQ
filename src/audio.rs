@@ -466,6 +466,7 @@ fn run_pipewire(
         link_ports("torroeq_feed", "output_FR", "torroeq_filter", "input_FR");
         link_ports("torroeq_filter", "output_FL", &target, "playback_FL");
         link_ports("torroeq_filter", "output_FR", &target, "playback_FR");
+        let _ = ready.send(Ok(()));
     });
 
     let _stop_source = stop_receiver.attach(mainloop.loop_(), {
@@ -474,7 +475,6 @@ fn run_pipewire(
     });
     telemetry.set_latency_ms(5.0);
     telemetry.set_running(true);
-    let _ = ready.send(Ok(()));
     mainloop.run();
     stop.store(true, Ordering::Release);
     let _ = linker.join();
