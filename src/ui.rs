@@ -478,9 +478,12 @@ impl Widget for MasterControl {
         buffer.set_string(
             fader_center.saturating_sub(2),
             knob_y,
-            knob_segment.repeat(4),
+            "━━━━",
             Style::default().fg(ACCENT).bold(),
         );
+        buffer[(fader_center + 3, knob_y)]
+            .set_symbol(knob_segment)
+            .set_fg(ACCENT);
 
         let meter_width = 4_u16.min(columns[1].width);
         let meter_left = columns[1].x + columns[1].width.saturating_sub(meter_width) / 2;
@@ -615,7 +618,7 @@ impl Widget for Fader {
         buffer.set_string(
             knob_x,
             knob_y,
-            knob_segment.repeat(knob_width),
+            "━".repeat(knob_width),
             Style::default()
                 .fg(if !self.enabled {
                     FAINT
@@ -626,6 +629,14 @@ impl Widget for Fader {
                 })
                 .add_modifier(Modifier::BOLD),
         );
+        let marker_x = if knob_x + (knob_width as u16) < area.right() {
+            knob_x + knob_width as u16
+        } else {
+            knob_x.saturating_sub(1)
+        };
+        buffer[(marker_x, knob_y)]
+            .set_symbol(knob_segment)
+            .set_fg(if self.selected { ACCENT } else { MUTED });
         let frequency = format_frequency(self.frequency);
         let label_x = area.x + area.width.saturating_sub(frequency.len() as u16) / 2;
         buffer.set_string(
@@ -641,7 +652,7 @@ impl Widget for Fader {
 }
 
 fn fader_position(gain: f32, track_top: u16, track_bottom: u16) -> (u16, &'static str) {
-    const SUBSTEPS: [&str; 4] = ["▁", "▄", "▀", "▔"];
+    const SUBSTEPS: [&str; 4] = ["⣀", "⠤", "⠒", "⠉"];
     const GAIN_STEP_DB: f32 = 0.5;
     const STEPS_PER_ROW: usize = 4;
 
@@ -662,7 +673,7 @@ fn fader_position(gain: f32, track_top: u16, track_bottom: u16) -> (u16, &'stati
 }
 
 fn master_fader_position(gain: f32, track_top: u16, track_bottom: u16) -> (u16, &'static str) {
-    const SUBSTEPS: [&str; 4] = ["▁", "▄", "▀", "▔"];
+    const SUBSTEPS: [&str; 4] = ["⣀", "⠤", "⠒", "⠉"];
     const STEPS_PER_ROW: usize = 4;
 
     let total_steps = (MAX_MASTER_DB - MIN_MASTER_DB) as usize;
