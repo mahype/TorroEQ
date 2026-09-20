@@ -470,18 +470,18 @@ impl Widget for MasterControl {
         let track_top = area.y;
         let track_bottom = label_y - 1;
 
-        let fader_center = columns[0].x + columns[0].width / 2;
-        for y in track_top..=track_bottom {
-            buffer[(fader_center, y)].set_symbol("│").set_fg(BORDER);
-        }
+        let volume_width = 4_u16.min(columns[0].width);
+        let volume_left = columns[0].x + columns[0].width.saturating_sub(volume_width) / 2;
         let (knob_y, knob_segment) = master_fader_position(self.gain_db, track_top, track_bottom);
-        let knob = knob_segment.repeat(4);
-        buffer.set_string(
-            fader_center.saturating_sub(2),
-            knob_y,
-            knob,
-            Style::default().fg(ACCENT).bold(),
-        );
+        for y in track_top..=track_bottom {
+            let active = y >= knob_y;
+            let symbol = if y == knob_y { knob_segment } else { "▄" };
+            for x in volume_left..volume_left + volume_width {
+                buffer[(x, y)]
+                    .set_symbol(symbol)
+                    .set_fg(if active { ACCENT } else { VFD_DIM });
+            }
+        }
 
         let meter_width = 4_u16.min(columns[1].width);
         let meter_left = columns[1].x + columns[1].width.saturating_sub(meter_width) / 2;
@@ -597,32 +597,29 @@ impl Widget for Fader {
         if area.width < 3 || area.height < 6 {
             return;
         }
-        let style = if self.enabled {
-            Style::default().fg(BORDER)
-        } else {
-            Style::default().fg(FAINT).add_modifier(Modifier::DIM)
-        };
         let label_rows = 2;
-        let track_top = area.y + 1;
+        let track_top = area.y;
         let track_bottom = area.bottom().saturating_sub(label_rows + 1);
         let center = area.x + area.width / 2;
-        for y in track_top..=track_bottom {
-            buffer[(center, y)].set_symbol("│").set_style(style);
-        }
         let (knob_y, knob_segment) = fader_position(self.gain, track_top, track_bottom);
         let knob_width = if area.width >= 6 { 4 } else { 2 };
-        let knob = knob_segment.repeat(knob_width);
         let knob_x = center.saturating_sub(knob_width as u16 / 2);
-        buffer.set_string(
-            knob_x,
-            knob_y,
-            knob,
-            Style::default()
-                .fg(if self.selected { ACCENT } else { Color::White })
-                .add_modifier(Modifier::BOLD),
-        );
-        if self.selected {
-            buffer[(area.x, knob_y)].set_symbol("▌").set_fg(ACCENT);
+        let active_color = if self.enabled {
+            if self.selected { ACCENT } else { VFD }
+        } else {
+            FAINT
+        };
+        let inactive_color = if self.enabled { VFD_DIM } else { PANEL };
+        for y in track_top..=track_bottom {
+            let active = y >= knob_y;
+            let symbol = if y == knob_y { knob_segment } else { "▄" };
+            for x in knob_x..knob_x + knob_width as u16 {
+                buffer[(x, y)].set_symbol(symbol).set_fg(if active {
+                    active_color
+                } else {
+                    inactive_color
+                });
+            }
         }
         let frequency = format_frequency(self.frequency);
         let label_x = area.x + area.width.saturating_sub(frequency.len() as u16) / 2;
@@ -639,7 +636,7 @@ impl Widget for Fader {
 }
 
 fn fader_position(gain: f32, track_top: u16, track_bottom: u16) -> (u16, &'static str) {
-    const SUBSTEPS: [&str; 4] = ["⣀", "⠤", "⠒", "⠉"];
+    const SUBSTEPS: [&str; 4] = ["▁", "▂", "▃", "▄"];
     const GAIN_STEP_DB: f32 = 0.5;
     const STEPS_PER_ROW: usize = 4;
 
@@ -660,7 +657,7 @@ fn fader_position(gain: f32, track_top: u16, track_bottom: u16) -> (u16, &'stati
 }
 
 fn master_fader_position(gain: f32, track_top: u16, track_bottom: u16) -> (u16, &'static str) {
-    const SUBSTEPS: [&str; 4] = ["⣀", "⠤", "⠒", "⠉"];
+    const SUBSTEPS: [&str; 4] = ["▁", "▂", "▃", "▄"];
     const STEPS_PER_ROW: usize = 4;
 
     let total_steps = (MAX_MASTER_DB - MIN_MASTER_DB) as usize;
