@@ -11,7 +11,7 @@ use crate::telemetry::{SPECTRUM_BINS, Telemetry};
 
 const FFT_SIZE: usize = 2048;
 const FLOOR_DB: f32 = -72.0;
-const PEAK_HOLD_FRAMES: u8 = 16;
+const PEAK_HOLD_FRAMES: u8 = 47;
 const PEAK_DECAY_DB: f32 = 0.3;
 const _: () = assert!(FFT_SIZE >= 2048);
 const _: () = assert!(SPECTRUM_BINS == BAND_COUNT);

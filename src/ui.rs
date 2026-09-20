@@ -22,7 +22,6 @@ const GREEN: Color = Color::Rgb(134, 207, 125);
 const AMBER: Color = Color::Rgb(236, 183, 85);
 const VFD: Color = Color::Rgb(92, 218, 207);
 const VFD_DIM: Color = Color::Rgb(35, 58, 59);
-const VFD_PEAK: Color = Color::Rgb(218, 244, 232);
 const SPECTRUM_FLOOR_DB: f32 = -48.0;
 
 pub fn render(frame: &mut Frame<'_>, app: &mut App) {
@@ -500,10 +499,15 @@ impl Widget for SpectrumMeter<'_> {
                 && peak_segment < meter_height as usize
             {
                 let peak_y = label_y - 1 - peak_segment as u16;
-                let marker_left = left + u16::from(right.saturating_sub(left) > 2);
-                let marker_right = right.saturating_sub(u16::from(right.saturating_sub(left) > 2));
-                for x in marker_left..marker_right {
-                    buffer[(x, peak_y)].set_symbol("-").set_fg(VFD_PEAK);
+                let peak_color = if peak > -3.0 {
+                    ACCENT
+                } else if peak > -9.0 {
+                    AMBER
+                } else {
+                    VFD
+                };
+                for x in left..right {
+                    buffer[(x, peak_y)].set_symbol("▄").set_fg(peak_color);
                 }
             }
 
