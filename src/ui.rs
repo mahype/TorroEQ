@@ -556,15 +556,10 @@ impl Widget for Fader {
         for y in track_top..=track_bottom {
             buffer[(center, y)].set_symbol("│").set_style(style);
         }
-        let ratio = ((self.gain - MIN_GAIN_DB) / (MAX_GAIN_DB - MIN_GAIN_DB)).clamp(0.0, 1.0);
-        let travel = track_bottom.saturating_sub(track_top) as f32;
-        let knob_y = track_bottom.saturating_sub((ratio * travel).round() as u16);
-        let knob = if area.width >= 6 {
-            "━━━━"
-        } else {
-            "━━"
-        };
-        let knob_x = center.saturating_sub((knob.chars().count() / 2) as u16);
+        let (knob_y, knob_segment) = fader_position(self.gain, track_top, track_bottom);
+        let knob_width = if area.width >= 6 { 4 } else { 2 };
+        let knob = knob_segment.repeat(knob_width);
+        let knob_x = center.saturating_sub(knob_width as u16 / 2);
         buffer.set_string(
             knob_x,
             knob_y,
@@ -588,6 +583,27 @@ impl Widget for Fader {
         let gain_x = area.x + area.width.saturating_sub(gain.len() as u16) / 2;
         buffer.set_string(gain_x, area.bottom() - 1, gain, Style::default().fg(MUTED));
     }
+}
+
+fn fader_position(gain: f32, track_top: u16, track_bottom: u16) -> (u16, &'static str) {
+    const SUBSTEPS: [&str; 4] = ["⣀", "⠤", "⠒", "⠉"];
+    const GAIN_STEP_DB: f32 = 0.5;
+    const STEPS_PER_ROW: usize = 4;
+
+    let total_steps = ((MAX_GAIN_DB - MIN_GAIN_DB) / GAIN_STEP_DB).round() as usize;
+    let step =
+        ((gain.clamp(MIN_GAIN_DB, MAX_GAIN_DB) - MIN_GAIN_DB) / GAIN_STEP_DB).round() as usize;
+    let row_count = total_steps / STEPS_PER_ROW;
+    let coarse_row = step / STEPS_PER_ROW;
+    let travel = track_bottom.saturating_sub(track_top);
+    let rows_up = ((coarse_row as f32 / row_count as f32) * travel as f32).round() as u16;
+    let phase = if step == total_steps {
+        STEPS_PER_ROW - 1
+    } else {
+        step % STEPS_PER_ROW
+    };
+
+    (track_bottom.saturating_sub(rows_up), SUBSTEPS[phase])
 }
 
 fn panel<'a>(title: &'a str, focused: bool) -> Block<'a> {
@@ -661,6 +677,18 @@ mod tests {
     fn frequency_labels_are_compact() {
         assert_eq!(format_frequency(31.0), "31");
         assert_eq!(format_frequency(4_000.0), "4k");
+    }
+
+    #[test]
+    fn fader_moves_visually_for_every_half_db_step() {
+        let positions = (0..=48)
+            .map(|step| {
+                let gain = MIN_GAIN_DB + step as f32 * 0.5;
+                fader_position(gain, 10, 22)
+            })
+            .collect::<Vec<_>>();
+
+        assert!(positions.windows(2).all(|pair| pair[0] != pair[1]));
     }
 
     #[test]
