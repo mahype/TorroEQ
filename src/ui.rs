@@ -122,7 +122,12 @@ fn render_session(frame: &mut Frame<'_>, area: Rect, app: &mut App) {
     let rows = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(2),
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Length(1),
             Constraint::Length(1),
             Constraint::Length(1),
             Constraint::Length(1),
@@ -133,110 +138,101 @@ fn render_session(frame: &mut Frame<'_>, area: Rect, app: &mut App) {
         ])
         .split(inner);
 
-    app.hit_regions.output = rows[0];
-    app.hit_regions.preset = rows[1];
+    app.hit_regions.output = Rect::new(rows[1].x, rows[1].y, rows[1].width, 2);
+    app.hit_regions.preset = Rect::new(rows[4].x, rows[4].y, rows[4].width, 2);
     frame.render_widget(
-        Paragraph::new(vec![
-            Line::styled(" OUTPUT", Style::default().fg(MUTED)),
-            Line::from(vec![
-                Span::raw(" "),
-                Span::raw(
-                    app.selected_output()
-                        .map_or("No output", |o| o.description.as_str()),
-                ),
-            ]),
-        ]),
-        rows[0],
+        Paragraph::new(" OUTPUT").style(Style::default().fg(MUTED)),
+        rows[1],
+    );
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![
+            Span::raw(" "),
+            Span::raw(
+                app.selected_output()
+                    .map_or("No output", |o| o.description.as_str()),
+            ),
+        ])),
+        rows[2],
+    );
+    frame.render_widget(
+        Paragraph::new(" PRESET").style(Style::default().fg(MUTED)),
+        rows[4],
     );
     frame.render_widget(
         Paragraph::new(Line::from(vec![
             Span::styled("▌ ", Style::default().fg(ACCENT)),
-            Span::styled("PRESET  ", Style::default().fg(MUTED)),
             Span::styled(&app.preset_name, Style::default().bold()),
             Span::styled(
                 if app.dirty { " *" } else { "" },
                 Style::default().fg(AMBER),
             ),
-        ]))
-        .style(Style::default().bg(SELECTED)),
-        rows[1],
-    );
-    frame.render_widget(
-        Paragraph::new(Line::from(vec![
-            Span::styled(" PREAMP  ", Style::default().fg(MUTED)),
-            Span::styled(
-                format!("{:+.1} dB", app.params.preamp_db),
-                Style::default().bold(),
-            ),
-        ])),
-        rows[3],
-    );
-    let headroom = suggested_headroom(app);
-    frame.render_widget(
-        Gauge::default()
-            .gauge_style(Style::default().fg(if headroom > 0.0 { GREEN } else { AMBER }))
-            .ratio(((headroom + 12.0) / 24.0).clamp(0.0, 1.0) as f64)
-            .label(format!("HEADROOM  {headroom:.1} dB")),
-        rows[4],
-    );
-    app.hit_regions.bypass = rows[5];
-    frame.render_widget(
-        Paragraph::new(Line::from(vec![
-            Span::raw(" "),
-            Span::styled(
-                if app.params.bypass { "○" } else { "●" },
-                Style::default().fg(if app.params.bypass { AMBER } else { GREEN }),
-            ),
-            Span::raw(if app.params.bypass {
-                " BYPASSED"
-            } else {
-                " EQ ACTIVE"
-            }),
-            Span::styled("  [b]", Style::default().fg(MUTED)),
         ])),
         rows[5],
     );
-    let status = if app.telemetry.clipped {
-        ("▲ CLIPPING", ACCENT)
-    } else if app.telemetry.limited {
-        ("▲ LIMITING", AMBER)
-    } else if app.telemetry.running {
-        ("● HEALTHY", GREEN)
-    } else {
-        ("○ OFFLINE", MUTED)
-    };
     frame.render_widget(
-        Paragraph::new(vec![
-            Line::from(vec![Span::styled(
-                status.0,
-                Style::default().fg(status.1).bold(),
-            )]),
-            Line::styled(
-                format!(
-                    "Peak  {:>6.1} dBFS",
-                    amplitude_db(app.telemetry.output_peak)
-                ),
-                Style::default().fg(MUTED),
-            ),
-            Line::styled(
-                format!("Input {:>6.1} dBFS", amplitude_db(app.telemetry.input_peak)),
-                Style::default().fg(FAINT),
-            ),
-            Line::styled(
-                if app.route_active {
-                    "SYSTEM ROUTING ON [a]"
-                } else {
-                    "Press [a] to activate"
-                },
-                Style::default().fg(if app.route_active { GREEN } else { AMBER }),
-            ),
-        ]),
+        Paragraph::new(session_field(
+            "PREAMP",
+            &format!("{:+.1} dB", app.params.preamp_db),
+            inner.width,
+        )),
         rows[7],
+    );
+    let headroom = suggested_headroom(app);
+    frame.render_widget(
+        Paragraph::new(session_field(
+            "HEADROOM",
+            &format!("{headroom:.1} dB"),
+            inner.width,
+        )),
+        rows[8],
+    );
+    app.hit_regions.bypass = rows[10];
+    frame.render_widget(
+        Paragraph::new(session_status(
+            if app.params.bypass { "○" } else { "●" },
+            if app.params.bypass {
+                "BYPASSED"
+            } else {
+                "EQ ACTIVE"
+            },
+            "[b]",
+            if app.params.bypass { AMBER } else { GREEN },
+            inner.width,
+        )),
+        rows[10],
+    );
+    frame.render_widget(
+        Paragraph::new(session_status(
+            if app.route_active { "●" } else { "○" },
+            if app.route_active {
+                "ROUTING ON"
+            } else {
+                "ROUTING OFF"
+            },
+            "[a]",
+            if app.route_active { GREEN } else { AMBER },
+            inner.width,
+        )),
+        rows[11],
     );
 }
 
 fn render_spectrum(frame: &mut Frame<'_>, area: Rect, app: &App, focused: bool) {
-    frame.render_widget(panel(" 10-BAND ANALYZER  -48 ... 0 dBFS ", focused), area);
+    let state = if app.telemetry.clipped {
+        "CLIP"
+    } else if app.telemetry.limited {
+        "LIMIT"
+    } else if app.telemetry.running {
+        "LIVE"
+    } else {
+        "OFFLINE"
+    };
+    let title = format!(
+        " ANALYZER  OUT {:>5.1}  IN {:>5.1} dBFS  {state} ",
+        amplitude_db(app.telemetry.output_peak),
+        amplitude_db(app.telemetry.input_peak),
+    );
+    frame.render_widget(panel(&title, focused), area);
     frame.render_widget(
         SpectrumMeter {
             levels: &app.telemetry.spectrum,
@@ -606,6 +602,33 @@ fn fader_position(gain: f32, track_top: u16, track_bottom: u16) -> (u16, &'stati
     };
 
     (track_bottom.saturating_sub(rows_up), SUBSTEPS[phase])
+}
+
+fn session_field(label: &str, value: &str, width: u16) -> Line<'static> {
+    let gap = usize::from(width).saturating_sub(label.len() + value.len() + 1);
+    Line::from(vec![
+        Span::styled(format!(" {label}"), Style::default().fg(MUTED)),
+        Span::raw(" ".repeat(gap)),
+        Span::styled(value.to_string(), Style::default().bold()),
+    ])
+}
+
+fn session_status(
+    indicator: &str,
+    label: &str,
+    key: &str,
+    color: Color,
+    width: u16,
+) -> Line<'static> {
+    let used = indicator.chars().count() + label.chars().count() + key.chars().count() + 2;
+    let gap = usize::from(width).saturating_sub(used);
+    Line::from(vec![
+        Span::raw(" "),
+        Span::styled(indicator.to_string(), Style::default().fg(color)),
+        Span::raw(format!(" {label}")),
+        Span::raw(" ".repeat(gap)),
+        Span::styled(key.to_string(), Style::default().fg(MUTED)),
+    ])
 }
 
 fn panel<'a>(title: &'a str, focused: bool) -> Block<'a> {
