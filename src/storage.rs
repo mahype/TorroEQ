@@ -184,9 +184,86 @@ fn factory_presets() -> Vec<Preset> {
             ..Preset::flat()
         },
         Preset {
+            name: "Air".into(),
+            gains_db: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.5, 1.5, 3.0, 4.0],
+            preamp_db: -4.0,
+            ..Preset::flat()
+        },
+        Preset {
+            name: "Loudness".into(),
+            gains_db: [6.0, 4.5, 2.0, 0.0, -1.0, -1.0, 0.0, 1.5, 3.5, 4.5],
+            preamp_db: -6.0,
+            ..Preset::flat()
+        },
+        Preset {
+            name: "Soft treble".into(),
+            gains_db: [0.0, 0.0, 0.0, 0.0, 0.0, -0.5, -2.0, -3.5, -2.5, -1.0],
+            ..Preset::flat()
+        },
+        Preset {
             name: "Voice clarity".into(),
             gains_db: [-4.0, -3.0, -2.0, -1.0, 0.5, 2.0, 3.0, 2.0, 0.0, -1.0],
             preamp_db: -3.0,
+            ..Preset::flat()
+        },
+        Preset {
+            name: "Movie".into(),
+            gains_db: [4.0, 3.0, 1.0, -1.0, -0.5, 1.5, 2.5, 2.0, 1.0, 0.5],
+            preamp_db: -4.0,
+            ..Preset::flat()
+        },
+        Preset {
+            name: "Gaming".into(),
+            gains_db: [-2.0, -1.0, 0.0, 0.5, 0.0, 1.5, 3.0, 4.0, 2.5, 1.0],
+            preamp_db: -4.0,
+            ..Preset::flat()
+        },
+        Preset {
+            name: "Late night".into(),
+            gains_db: [-8.0, -6.0, -4.0, -2.0, 0.0, 0.0, 0.5, 1.0, 0.5, 0.0],
+            preamp_db: -1.0,
+            ..Preset::flat()
+        },
+        Preset {
+            name: "Small speakers".into(),
+            gains_db: [-6.0, -2.0, 3.0, 2.5, 0.0, -1.0, 0.5, 1.5, 1.0, 0.0],
+            preamp_db: -3.0,
+            ..Preset::flat()
+        },
+        Preset {
+            name: "Rock".into(),
+            gains_db: [4.0, 3.0, 1.5, -0.5, -1.5, -0.5, 1.5, 3.0, 3.5, 3.0],
+            preamp_db: -4.0,
+            ..Preset::flat()
+        },
+        Preset {
+            name: "Pop".into(),
+            gains_db: [-1.0, 0.0, 1.5, 2.5, 3.0, 2.5, 1.0, 0.0, -0.5, -1.0],
+            preamp_db: -3.0,
+            ..Preset::flat()
+        },
+        Preset {
+            name: "Electronic".into(),
+            gains_db: [5.0, 4.5, 2.0, 0.0, -1.5, 0.0, 1.0, 2.0, 3.5, 4.0],
+            preamp_db: -5.0,
+            ..Preset::flat()
+        },
+        Preset {
+            name: "Hip-hop".into(),
+            gains_db: [5.5, 5.0, 2.5, 1.0, -1.0, -0.5, 1.0, 0.5, 1.5, 2.0],
+            preamp_db: -5.5,
+            ..Preset::flat()
+        },
+        Preset {
+            name: "Jazz".into(),
+            gains_db: [2.0, 1.5, 1.0, 1.5, -1.0, -1.0, 0.0, 1.0, 2.0, 2.5],
+            preamp_db: -2.5,
+            ..Preset::flat()
+        },
+        Preset {
+            name: "Acoustic".into(),
+            gains_db: [2.0, 2.0, 1.5, 0.5, 1.0, 1.0, 2.0, 2.5, 2.0, 1.5],
+            preamp_db: -2.5,
             ..Preset::flat()
         },
     ]
@@ -222,6 +299,40 @@ fn atomic_write(path: &Path, content: &[u8]) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::dsp::{MAX_GAIN_DB, MAX_PREAMP_DB, MIN_GAIN_DB, MIN_PREAMP_DB};
+
+    #[test]
+    fn factory_presets_are_valid_and_headroom_safe() {
+        let presets = factory_presets();
+        assert_eq!(presets[0], Preset::flat());
+        for (index, preset) in presets.iter().enumerate() {
+            assert!(
+                presets[..index]
+                    .iter()
+                    .all(|other| other.name != preset.name),
+                "duplicate preset name {}",
+                preset.name
+            );
+            assert!(!safe_name(&preset.name).is_empty());
+            assert!((MIN_PREAMP_DB..=MAX_PREAMP_DB).contains(&preset.preamp_db));
+            let mut highest = 0.0_f32;
+            for gain in preset.gains_db {
+                assert!((MIN_GAIN_DB..=MAX_GAIN_DB).contains(&gain));
+                assert_eq!(
+                    (gain * 2.0).fract(),
+                    0.0,
+                    "{} is off the 0.5 dB grid",
+                    preset.name
+                );
+                highest = highest.max(gain);
+            }
+            assert!(
+                preset.preamp_db + highest <= 0.0,
+                "{} boosts without matching preamp headroom",
+                preset.name
+            );
+        }
+    }
 
     #[test]
     fn state_and_presets_round_trip() {
