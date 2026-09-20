@@ -9,7 +9,9 @@ use ratatui::widgets::{
 };
 
 use crate::app::{App, Dialog, ViewMode};
-use crate::dsp::{BAND_COUNT, BAND_FREQUENCIES, MAX_GAIN_DB, MIN_GAIN_DB};
+use crate::dsp::{
+    BAND_COUNT, BAND_FREQUENCIES, MAX_GAIN_DB, MAX_MASTER_DB, MIN_GAIN_DB, MIN_MASTER_DB,
+};
 
 const BRAND: Color = Color::Rgb(213, 12, 12);
 const ACCENT: Color = Color::Rgb(238, 58, 51);
@@ -26,6 +28,7 @@ const SPECTRUM_FLOOR_DB: f32 = -48.0;
 
 pub fn render(frame: &mut Frame<'_>, app: &mut App) {
     let area = frame.area();
+    app.hit_regions = Default::default();
     if area.width < 72 || area.height < 22 {
         frame.render_widget(
             Paragraph::new("TorroEQ needs at least 72 columns x 22 rows")
@@ -55,38 +58,44 @@ pub fn render(frame: &mut Frame<'_>, app: &mut App) {
     }
 }
 
-fn render_header(frame: &mut Frame<'_>, area: Rect, app: &App) {
-    let status = if app.telemetry.running {
-        Span::styled("● LIVE", Style::default().fg(GREEN).bold())
+fn render_header(frame: &mut Frame<'_>, area: Rect, app: &mut App) {
+    let (status_text, status_color) = if app.telemetry.running {
+        ("● LIVE", GREEN)
     } else {
-        Span::styled("○ OFFLINE", Style::default().fg(AMBER).bold())
+        ("○ OFFLINE", AMBER)
     };
+    let view = match app.view {
+        ViewMode::Studio => "STUDIO",
+        ViewMode::Focus => "FOCUS",
+    };
+    let right = format!("48 kHz / 2ch  {:>4.1} ms  ", app.telemetry.latency_ms);
+    let prefix_width = 10 + 2 + 5 + view.len() + 2 + status_text.chars().count() + 6;
+    let output_width = usize::from(area.width).saturating_sub(prefix_width + right.len());
+    let output = truncate(
+        app.selected_output()
+            .map_or("No output", |device| device.description.as_str()),
+        output_width,
+    );
     let line = Line::from(vec![
-        Span::styled(" TORRO", Style::default().fg(Color::White).bold()),
+        Span::styled("  \\_ TORRO", Style::default().fg(Color::White).bold()),
         Span::styled("EQ", Style::default().fg(Color::Gray).bold()),
-        Span::raw(" "),
-        Span::styled(
-            match app.view {
-                ViewMode::Studio => "STUDIO",
-                ViewMode::Focus => "FOCUS",
-            },
-            Style::default().fg(Color::White),
-        ),
+        Span::styled(" _/  ", Style::default().fg(Color::White).bold()),
+        Span::styled(view, Style::default().fg(Color::White)),
         Span::raw("  "),
-        status,
+        Span::styled(status_text, Style::default().fg(status_color).bold()),
+        Span::styled("  OUT ", Style::default().fg(Color::Rgb(255, 210, 206))),
+        Span::styled(output.clone(), Style::default().fg(Color::White)),
+        Span::raw(" ".repeat(output_width.saturating_sub(output.chars().count()))),
+        Span::styled(right, Style::default().fg(Color::White)),
     ]);
+    let output_start = area.x + (prefix_width - 6) as u16;
+    app.hit_regions.output =
+        Rect::new(output_start, area.y, (5 + output_width) as u16, area.height);
     frame.render_widget(
         Paragraph::new(line)
             .style(Style::default().bg(BRAND))
             .alignment(Alignment::Left)
             .block(Block::default().style(Style::default().bg(BRAND))),
-        area,
-    );
-    let right = format!("48 kHz / 2ch  {:>6.1} ms ", app.telemetry.latency_ms);
-    frame.render_widget(
-        Paragraph::new(right)
-            .style(Style::default().fg(Color::White).bg(BRAND))
-            .alignment(Alignment::Right),
         area,
     );
 }
@@ -127,36 +136,20 @@ fn render_session(frame: &mut Frame<'_>, area: Rect, app: &mut App) {
             Constraint::Length(1),
             Constraint::Length(1),
             Constraint::Length(1),
+            Constraint::Min(8),
             Constraint::Length(1),
             Constraint::Length(1),
             Constraint::Length(1),
             Constraint::Length(1),
             Constraint::Length(1),
             Constraint::Length(1),
-            Constraint::Length(1),
-            Constraint::Min(4),
         ])
         .split(inner);
 
-    app.hit_regions.output = Rect::new(rows[1].x, rows[1].y, rows[1].width, 2);
-    app.hit_regions.preset = Rect::new(rows[4].x, rows[4].y, rows[4].width, 2);
-    frame.render_widget(
-        Paragraph::new(" OUTPUT").style(Style::default().fg(MUTED)),
-        rows[1],
-    );
-    frame.render_widget(
-        Paragraph::new(Line::from(vec![
-            Span::raw(" "),
-            Span::raw(
-                app.selected_output()
-                    .map_or("No output", |o| o.description.as_str()),
-            ),
-        ])),
-        rows[2],
-    );
+    app.hit_regions.preset = Rect::new(rows[1].x, rows[1].y, rows[1].width, 2);
     frame.render_widget(
         Paragraph::new(" PRESET").style(Style::default().fg(MUTED)),
-        rows[4],
+        rows[1],
     );
     frame.render_widget(
         Paragraph::new(Line::from(vec![
@@ -167,6 +160,22 @@ fn render_session(frame: &mut Frame<'_>, area: Rect, app: &mut App) {
                 Style::default().fg(AMBER),
             ),
         ])),
+        rows[2],
+    );
+    frame.render_widget(
+        Paragraph::new(session_field(
+            "MASTER",
+            &format!("{:.0} dB", app.params.master_db),
+            inner.width,
+        )),
+        rows[4],
+    );
+    app.hit_regions.master = rows[5];
+    frame.render_widget(
+        MasterControl {
+            gain_db: app.params.master_db,
+            level: app.telemetry.output_peak,
+        },
         rows[5],
     );
     frame.render_widget(
@@ -329,6 +338,8 @@ fn render_footer(frame: &mut Frame<'_>, area: Rect) {
         Span::raw("h/l  "),
         Span::styled("gain ", Style::default().fg(MUTED)),
         Span::raw("j/k  "),
+        Span::styled("master ", Style::default().fg(MUTED)),
+        Span::raw("-/+  "),
         Span::styled("toggle ", Style::default().fg(MUTED)),
         Span::raw("space  "),
         Span::styled("activate ", Style::default().fg(MUTED)),
@@ -370,6 +381,7 @@ fn render_dialog(frame: &mut Frame<'_>, area: Rect, dialog: &Dialog, app: &App) 
                 Line::from("a                    Activate system routing"),
                 Line::from("m                    Toggle limiter"),
                 Line::from("[ / ]                Adjust preamp"),
+                Line::from("- / +                Adjust master volume"),
                 Line::from("p / o                Presets / outputs"),
                 Line::from("s                    Save current preset"),
                 Line::from("v                    Studio/focus view"),
@@ -440,6 +452,61 @@ struct Fader {
     selected: bool,
 }
 
+struct MasterControl {
+    gain_db: f32,
+    level: f32,
+}
+
+impl Widget for MasterControl {
+    fn render(self, area: Rect, buffer: &mut Buffer) {
+        if area.width < 12 || area.height < 5 {
+            return;
+        }
+        let columns = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+            .split(area);
+        let label_y = area.bottom() - 1;
+        let track_top = area.y;
+        let track_bottom = label_y - 1;
+
+        let fader_center = columns[0].x + columns[0].width / 2;
+        for y in track_top..=track_bottom {
+            buffer[(fader_center, y)].set_symbol("│").set_fg(BORDER);
+        }
+        let (knob_y, knob_segment) = master_fader_position(self.gain_db, track_top, track_bottom);
+        let knob = knob_segment.repeat(4);
+        buffer.set_string(
+            fader_center.saturating_sub(2),
+            knob_y,
+            knob,
+            Style::default().fg(ACCENT).bold(),
+        );
+
+        let meter_width = 4_u16.min(columns[1].width);
+        let meter_left = columns[1].x + columns[1].width.saturating_sub(meter_width) / 2;
+        let meter_height = track_bottom - track_top + 1;
+        let level_db = amplitude_db(self.level).clamp(SPECTRUM_FLOOR_DB, 0.0);
+        let lit_segments = db_to_segment(level_db, meter_height, true);
+        for y in track_top..=track_bottom {
+            let from_bottom = (track_bottom - y) as usize;
+            let active = from_bottom < lit_segments;
+            let segment_db = SPECTRUM_FLOOR_DB
+                + (from_bottom + 1) as f32 / meter_height as f32 * -SPECTRUM_FLOOR_DB;
+            for x in meter_left..meter_left + meter_width {
+                buffer[(x, y)].set_symbol("▄").set_fg(if active {
+                    meter_color(segment_db)
+                } else {
+                    VFD_DIM
+                });
+            }
+        }
+
+        center_text(buffer, columns[0], label_y, "VOLUME", MUTED);
+        center_text(buffer, columns[1], label_y, "LEVEL", MUTED);
+    }
+}
+
 struct SpectrumMeter<'a> {
     levels: &'a [f32; BAND_COUNT],
     peaks: &'a [f32; BAND_COUNT],
@@ -473,13 +540,7 @@ impl Widget for SpectrumMeter<'_> {
                 let segment_db = SPECTRUM_FLOOR_DB
                     + (from_bottom + 1) as f32 / meter_height as f32 * -SPECTRUM_FLOOR_DB;
                 let color = if active {
-                    if segment_db > -3.0 {
-                        ACCENT
-                    } else if segment_db > -9.0 {
-                        AMBER
-                    } else {
-                        VFD
-                    }
+                    meter_color(segment_db)
                 } else {
                     VFD_DIM
                 };
@@ -493,13 +554,7 @@ impl Widget for SpectrumMeter<'_> {
                 && peak_segment < meter_height as usize
             {
                 let peak_y = label_y - 1 - peak_segment as u16;
-                let peak_color = if peak > -3.0 {
-                    ACCENT
-                } else if peak > -9.0 {
-                    AMBER
-                } else {
-                    VFD
-                };
+                let peak_color = meter_color(peak);
                 for x in left..right {
                     buffer[(x, peak_y)].set_symbol("▄").set_fg(peak_color);
                 }
@@ -602,6 +657,53 @@ fn fader_position(gain: f32, track_top: u16, track_bottom: u16) -> (u16, &'stati
     };
 
     (track_bottom.saturating_sub(rows_up), SUBSTEPS[phase])
+}
+
+fn master_fader_position(gain: f32, track_top: u16, track_bottom: u16) -> (u16, &'static str) {
+    const SUBSTEPS: [&str; 4] = ["⣀", "⠤", "⠒", "⠉"];
+    const STEPS_PER_ROW: usize = 4;
+
+    let total_steps = (MAX_MASTER_DB - MIN_MASTER_DB) as usize;
+    let step = (gain.clamp(MIN_MASTER_DB, MAX_MASTER_DB) - MIN_MASTER_DB).round() as usize;
+    let row_count = total_steps / STEPS_PER_ROW;
+    let coarse_row = step / STEPS_PER_ROW;
+    let travel = track_bottom.saturating_sub(track_top);
+    let rows_up = ((coarse_row as f32 / row_count as f32) * travel as f32).round() as u16;
+    let phase = if step == total_steps {
+        STEPS_PER_ROW - 1
+    } else {
+        step % STEPS_PER_ROW
+    };
+
+    (track_bottom.saturating_sub(rows_up), SUBSTEPS[phase])
+}
+
+fn meter_color(db: f32) -> Color {
+    if db > -3.0 {
+        ACCENT
+    } else if db > -9.0 {
+        AMBER
+    } else {
+        VFD
+    }
+}
+
+fn center_text(buffer: &mut Buffer, area: Rect, y: u16, text: &str, color: Color) {
+    let x = area.x + area.width.saturating_sub(text.len() as u16) / 2;
+    buffer.set_string(x, y, text, Style::default().fg(color));
+}
+
+fn truncate(value: &str, width: usize) -> String {
+    let length = value.chars().count();
+    if length <= width {
+        return value.to_string();
+    }
+    if width <= 3 {
+        return ".".repeat(width);
+    }
+    let mut shortened = value.chars().take(width - 3).collect::<String>();
+    shortened.push_str("...");
+    shortened
 }
 
 fn session_field(label: &str, value: &str, width: u16) -> Line<'static> {
@@ -720,6 +822,15 @@ mod tests {
     }
 
     #[test]
+    fn master_fader_moves_visually_for_every_db_step() {
+        let positions = (0..=60)
+            .map(|step| master_fader_position(MIN_MASTER_DB + step as f32, 10, 25))
+            .collect::<Vec<_>>();
+
+        assert!(positions.windows(2).all(|pair| pair[0] != pair[1]));
+    }
+
+    #[test]
     fn studio_and_focus_render_at_supported_sizes() {
         for (width, height) in [(120, 36), (100, 30), (80, 24)] {
             let telemetry = Telemetry::default();
@@ -738,6 +849,20 @@ mod tests {
             let mut terminal = Terminal::new(backend).unwrap();
             terminal.draw(|frame| render(frame, &mut app)).unwrap();
             assert!(app.hit_regions.bands[0].width > 0);
+            if width == 120 {
+                let buffer = terminal.backend().buffer();
+                let mut text = String::new();
+                for y in 0..buffer.area.height {
+                    for x in 0..buffer.area.width {
+                        text.push_str(buffer[(x, y)].symbol());
+                    }
+                }
+                assert!(text.contains("\\_ TORROEQ _/"));
+                assert!(text.contains("Test output"));
+                assert!(text.contains("MASTER"));
+                assert!(text.contains("VOLUME"));
+                assert!(text.contains("LEVEL"));
+            }
 
             app.view = ViewMode::Focus;
             terminal.draw(|frame| render(frame, &mut app)).unwrap();

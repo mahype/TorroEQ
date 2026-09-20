@@ -3,7 +3,9 @@ use std::sync::Arc;
 use ratatui::layout::Rect;
 
 use crate::audio::OutputDevice;
-use crate::dsp::{BAND_COUNT, MAX_GAIN_DB, MIN_GAIN_DB, ParamSnapshot, SharedParams};
+use crate::dsp::{
+    BAND_COUNT, MAX_GAIN_DB, MAX_MASTER_DB, MIN_GAIN_DB, MIN_MASTER_DB, ParamSnapshot, SharedParams,
+};
 use crate::storage::{Preset, SavedState};
 use crate::telemetry::TelemetrySnapshot;
 
@@ -27,6 +29,7 @@ pub enum Dialog {
 pub struct HitRegions {
     pub bands: [Rect; BAND_COUNT],
     pub bypass: Rect,
+    pub master: Rect,
     pub preset: Rect,
     pub output: Rect,
 }
@@ -57,7 +60,8 @@ impl App {
         outputs: Vec<OutputDevice>,
         telemetry: TelemetrySnapshot,
     ) -> Self {
-        let params = state.params.to_params(state.bypass);
+        let mut params = state.params.to_params(state.bypass);
+        params.master_db = state.master_db.clamp(MIN_MASTER_DB, MAX_MASTER_DB);
         let output_index = outputs
             .iter()
             .position(|output| output.is_default)
@@ -137,9 +141,17 @@ impl App {
         self.publish_change();
     }
 
+    pub fn adjust_master(&mut self, delta: f32) {
+        self.params.master_db = (self.params.master_db + delta).clamp(MIN_MASTER_DB, MAX_MASTER_DB);
+        self.params.master_db = self.params.master_db.round();
+        self.shared_params.replace(self.params);
+    }
+
     pub fn apply_preset(&mut self, index: usize) {
         if let Some(preset) = self.presets.get(index) {
+            let master_db = self.params.master_db;
             self.params = preset.to_params(self.params.bypass);
+            self.params.master_db = master_db;
             self.preset_name = preset.name.clone();
             self.shared_params.replace(self.params);
             self.dirty = false;
@@ -161,6 +173,7 @@ impl App {
             focus_view: self.view == ViewMode::Focus,
             params: Preset::from_params(self.preset_name.clone(), self.params),
             bypass: self.params.bypass,
+            master_db: self.params.master_db,
         }
     }
 
@@ -208,5 +221,21 @@ mod tests {
             app.selected_output().map(|output| output.name.as_str()),
             Some("headphones")
         );
+    }
+
+    #[test]
+    fn master_volume_is_independent_from_presets() {
+        let mut app = App::new(
+            SavedState::default(),
+            vec![Preset::flat()],
+            Vec::new(),
+            Telemetry::default().snapshot(),
+        );
+
+        app.adjust_master(-12.0);
+        assert_eq!(app.params.master_db, -12.0);
+        assert!(!app.dirty);
+        app.apply_preset(0);
+        assert_eq!(app.params.master_db, -12.0);
     }
 }

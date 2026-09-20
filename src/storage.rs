@@ -37,6 +37,7 @@ impl Preset {
             band_gains_db: self.gains_db,
             band_enabled: self.enabled,
             preamp_db: self.preamp_db,
+            master_db: 0.0,
             bypass,
             limiter_enabled: self.limiter_enabled,
             limiter_threshold: 0.891_250_9,
@@ -64,6 +65,8 @@ pub struct SavedState {
     pub focus_view: bool,
     pub params: Preset,
     pub bypass: bool,
+    #[serde(default)]
+    pub master_db: f32,
 }
 
 impl Default for SavedState {
@@ -75,6 +78,7 @@ impl Default for SavedState {
             focus_view: false,
             params: Preset::flat(),
             bypass: false,
+            master_db: 0.0,
         }
     }
 }
@@ -229,8 +233,11 @@ mod tests {
             ..SavedState::default()
         };
         state.params.gains_db[4] = 4.5;
+        state.master_db = -12.0;
         storage.save_state(&state).unwrap();
-        assert_eq!(storage.load_state().unwrap().params.gains_db[4], 4.5);
+        let loaded = storage.load_state().unwrap();
+        assert_eq!(loaded.params.gains_db[4], 4.5);
+        assert_eq!(loaded.master_db, -12.0);
 
         let preset = Preset::from_params("My Preset", state.params.to_params(false));
         storage.save_preset(&preset).unwrap();

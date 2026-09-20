@@ -15,6 +15,8 @@ pub const MIN_GAIN_DB: f32 = -12.0;
 pub const MAX_GAIN_DB: f32 = 12.0;
 pub const MIN_PREAMP_DB: f32 = -18.0;
 pub const MAX_PREAMP_DB: f32 = 6.0;
+pub const MIN_MASTER_DB: f32 = -60.0;
+pub const MAX_MASTER_DB: f32 = 0.0;
 pub const MIN_LIMITER_THRESHOLD: f32 = 0.1;
 pub const MAX_LIMITER_THRESHOLD: f32 = 1.0;
 
@@ -32,6 +34,7 @@ pub struct ParamSnapshot {
     pub band_gains_db: [f32; BAND_COUNT],
     pub band_enabled: [bool; BAND_COUNT],
     pub preamp_db: f32,
+    pub master_db: f32,
     pub bypass: bool,
     pub limiter_enabled: bool,
     pub limiter_threshold: f32,
@@ -43,6 +46,7 @@ impl Default for ParamSnapshot {
             band_gains_db: [0.0; BAND_COUNT],
             band_enabled: [true; BAND_COUNT],
             preamp_db: 0.0,
+            master_db: 0.0,
             bypass: false,
             limiter_enabled: true,
             limiter_threshold: DEFAULT_LIMITER_THRESHOLD,
@@ -57,6 +61,7 @@ impl ParamSnapshot {
             *gain = finite_clamp(*gain, 0.0, MIN_GAIN_DB, MAX_GAIN_DB);
         }
         self.preamp_db = finite_clamp(self.preamp_db, 0.0, MIN_PREAMP_DB, MAX_PREAMP_DB);
+        self.master_db = finite_clamp(self.master_db, 0.0, MIN_MASTER_DB, MAX_MASTER_DB);
         self.limiter_threshold = finite_clamp(
             self.limiter_threshold,
             DEFAULT_LIMITER_THRESHOLD,
@@ -77,6 +82,7 @@ pub struct SharedParams {
     band_gains_db: [AtomicU32; BAND_COUNT],
     band_enabled: [AtomicU32; BAND_COUNT],
     preamp_db: AtomicU32,
+    master_db: AtomicU32,
     bypass: AtomicU32,
     limiter_enabled: AtomicU32,
     limiter_threshold: AtomicU32,
@@ -96,6 +102,7 @@ impl SharedParams {
             band_gains_db: array::from_fn(|i| AtomicU32::new(params.band_gains_db[i].to_bits())),
             band_enabled: array::from_fn(|i| AtomicU32::new(params.band_enabled[i] as u32)),
             preamp_db: AtomicU32::new(params.preamp_db.to_bits()),
+            master_db: AtomicU32::new(params.master_db.to_bits()),
             bypass: AtomicU32::new(params.bypass as u32),
             limiter_enabled: AtomicU32::new(params.limiter_enabled as u32),
             limiter_threshold: AtomicU32::new(params.limiter_threshold.to_bits()),
@@ -188,6 +195,10 @@ impl SharedParams {
         self.update(|params| params.preamp_db = preamp_db);
     }
 
+    pub fn set_master_db(&self, master_db: f32) {
+        self.update(|params| params.master_db = master_db);
+    }
+
     pub fn set_bypass(&self, bypass: bool) {
         self.update(|params| params.bypass = bypass);
     }
@@ -206,6 +217,7 @@ impl SharedParams {
             }),
             band_enabled: array::from_fn(|i| self.band_enabled[i].load(Ordering::Relaxed) != 0),
             preamp_db: f32::from_bits(self.preamp_db.load(Ordering::Relaxed)),
+            master_db: f32::from_bits(self.master_db.load(Ordering::Relaxed)),
             bypass: self.bypass.load(Ordering::Relaxed) != 0,
             limiter_enabled: self.limiter_enabled.load(Ordering::Relaxed) != 0,
             limiter_threshold: f32::from_bits(self.limiter_threshold.load(Ordering::Relaxed)),
@@ -219,6 +231,8 @@ impl SharedParams {
         }
         self.preamp_db
             .store(params.preamp_db.to_bits(), Ordering::Relaxed);
+        self.master_db
+            .store(params.master_db.to_bits(), Ordering::Relaxed);
         self.bypass.store(params.bypass as u32, Ordering::Relaxed);
         self.limiter_enabled
             .store(params.limiter_enabled as u32, Ordering::Relaxed);
@@ -332,6 +346,8 @@ pub struct StereoEq {
     filters: [[Biquad; BAND_COUNT]; 2],
     preamp_db: f32,
     target_preamp_db: f32,
+    master_db: f32,
+    target_master_db: f32,
     bypass_mix: f32,
     target_bypass_mix: f32,
     limiter_enabled: bool,
@@ -352,6 +368,8 @@ impl StereoEq {
             filters: [[Biquad::default(); BAND_COUNT]; 2],
             preamp_db: 0.0,
             target_preamp_db: 0.0,
+            master_db: 0.0,
+            target_master_db: 0.0,
             bypass_mix: 0.0,
             target_bypass_mix: 0.0,
             limiter_enabled: true,
@@ -385,6 +403,7 @@ impl StereoEq {
             };
         }
         self.target_preamp_db = params.preamp_db;
+        self.target_master_db = params.master_db;
         self.target_bypass_mix = params.bypass as u8 as f32;
         self.limiter_enabled = params.limiter_enabled;
         self.limiter_threshold = params.limiter_threshold;
@@ -395,6 +414,7 @@ impl StereoEq {
         self.apply_params(params);
         self.band_gains_db = self.target_band_gains_db;
         self.preamp_db = self.target_preamp_db;
+        self.master_db = self.target_master_db;
         self.bypass_mix = self.target_bypass_mix;
         for (i, frequency) in BAND_FREQUENCIES.iter().copied().enumerate() {
             self.coefficients[i] =
@@ -440,6 +460,10 @@ impl StereoEq {
             output[0] *= scale;
             output[1] *= scale;
         }
+
+        let master = 10.0_f32.powf(self.master_db / 20.0);
+        output[0] *= master;
+        output[1] *= master;
 
         ProcessedFrame {
             left: output[0],
@@ -504,6 +528,7 @@ impl StereoEq {
             }
         }
         self.preamp_db = smooth(self.preamp_db, self.target_preamp_db, self.smooth_factor);
+        self.master_db = smooth(self.master_db, self.target_master_db, self.smooth_factor);
         self.bypass_mix = smooth(self.bypass_mix, self.target_bypass_mix, self.smooth_factor);
     }
 }
@@ -576,6 +601,23 @@ mod tests {
     }
 
     #[test]
+    fn master_volume_attenuates_final_output_and_meter() {
+        let mut eq = StereoEq::new(SAMPLE_RATE);
+        let params = ParamSnapshot {
+            master_db: -6.0,
+            limiter_enabled: false,
+            ..ParamSnapshot::default()
+        };
+        eq.apply_params_immediate(&params);
+
+        let output = eq.process_frame(0.5, -0.25);
+        let scale = 10.0_f32.powf(-6.0 / 20.0);
+        assert!((output.left - 0.5 * scale).abs() < 1.0e-6);
+        assert!((output.right + 0.25 * scale).abs() < 1.0e-6);
+        assert!((output.metrics.output_peak - 0.5 * scale).abs() < 1.0e-6);
+    }
+
+    #[test]
     fn gain_at_each_band_center_is_close_to_requested() {
         for (band, frequency) in BAND_FREQUENCIES.iter().copied().enumerate() {
             if frequency >= SAMPLE_RATE * 0.45 {
@@ -611,12 +653,14 @@ mod tests {
         let shared = SharedParams::new(ParamSnapshot {
             band_gains_db: [f32::INFINITY; BAND_COUNT],
             preamp_db: f32::NAN,
+            master_db: f32::INFINITY,
             limiter_threshold: -50.0,
             ..ParamSnapshot::default()
         });
         let snapshot = shared.snapshot();
         assert_eq!(snapshot.band_gains_db, [0.0; BAND_COUNT]);
         assert_eq!(snapshot.preamp_db, 0.0);
+        assert_eq!(snapshot.master_db, 0.0);
         assert_eq!(snapshot.limiter_threshold, MIN_LIMITER_THRESHOLD);
 
         shared.set_band_gain(0, 100.0);

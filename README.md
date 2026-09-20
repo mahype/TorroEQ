@@ -49,6 +49,7 @@ cargo run -- --demo
 | Global bypass | `b` | Click |
 | Limiter | `m` | - |
 | Preamp | `[` / `]` | - |
+| Master volume | `-` / `+` | Wheel over master |
 | Presets / outputs | `p` / `o` | Click |
 | Save preset | `s` | - |
 | Studio / focus view | `v` | - |

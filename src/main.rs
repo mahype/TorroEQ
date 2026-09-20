@@ -252,6 +252,8 @@ fn handle_key(app: &mut App, key: KeyEvent, storage: &Storage) -> Result<()> {
         KeyCode::Char('m') => app.toggle_limiter(),
         KeyCode::Char('[') => app.adjust_preamp(-0.5),
         KeyCode::Char(']') => app.adjust_preamp(0.5),
+        KeyCode::Char('-') => app.adjust_master(-1.0),
+        KeyCode::Char('+') | KeyCode::Char('=') => app.adjust_master(1.0),
         KeyCode::Char('v') => {
             app.view = if app.view == ViewMode::Studio {
                 ViewMode::Focus
@@ -397,26 +399,32 @@ fn handle_mouse(app: &mut App, mouse: MouseEvent) {
             }
         }
         MouseEventKind::ScrollUp => {
-            select_hovered_band(app, point);
-            app.adjust_gain(if mouse.modifiers.contains(KeyModifiers::SHIFT) {
-                2.0
-            } else {
-                0.5
-            });
+            if contains(app.hit_regions.master, point) {
+                app.adjust_master(1.0);
+            } else if select_hovered_band(app, point) {
+                app.adjust_gain(if mouse.modifiers.contains(KeyModifiers::SHIFT) {
+                    2.0
+                } else {
+                    0.5
+                });
+            }
         }
         MouseEventKind::ScrollDown => {
-            select_hovered_band(app, point);
-            app.adjust_gain(if mouse.modifiers.contains(KeyModifiers::SHIFT) {
-                -2.0
-            } else {
-                -0.5
-            });
+            if contains(app.hit_regions.master, point) {
+                app.adjust_master(-1.0);
+            } else if select_hovered_band(app, point) {
+                app.adjust_gain(if mouse.modifiers.contains(KeyModifiers::SHIFT) {
+                    -2.0
+                } else {
+                    -0.5
+                });
+            }
         }
         _ => {}
     }
 }
 
-fn select_hovered_band(app: &mut App, point: (u16, u16)) {
+fn select_hovered_band(app: &mut App, point: (u16, u16)) -> bool {
     if let Some(index) = app
         .hit_regions
         .bands
@@ -424,6 +432,9 @@ fn select_hovered_band(app: &mut App, point: (u16, u16)) {
         .position(|region| contains(*region, point))
     {
         app.selected_band = index;
+        true
+    } else {
+        false
     }
 }
 
