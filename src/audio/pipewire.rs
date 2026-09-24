@@ -1,10 +1,12 @@
 use std::ffi::{CString, c_void};
+use std::io::Write;
 use std::process::{Command, Stdio};
 use std::ptr;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::thread::{self, JoinHandle};
+use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow, bail};
 use pipewire as pw;
@@ -12,20 +14,13 @@ use pw::properties::properties;
 use rtrb::{Producer, RingBuffer};
 use serde::Deserialize;
 
+use super::OutputDevice;
 use crate::analyzer;
 use crate::dsp::{BlockMetrics, ParamSnapshot, SharedParams, StereoEq};
 use crate::telemetry::Telemetry;
 
 const SAMPLE_RATE: u32 = 48_000;
 const ANALYZER_RING_SAMPLES: usize = 32_768;
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct OutputDevice {
-    pub id: u32,
-    pub name: String,
-    pub description: String,
-    pub is_default: bool,
-}
 
 #[derive(Deserialize)]
 struct DumpObject {
@@ -101,6 +96,77 @@ pub fn discover_outputs() -> Result<Vec<OutputDevice>> {
             .then_with(|| left.description.cmp(&right.description))
     });
     Ok(outputs)
+}
+
+pub fn check_audio() -> Result<()> {
+    let output = discover_outputs()?
+        .into_iter()
+        .next()
+        .context("no PipeWire audio output found")?;
+    let params = Arc::new(SharedParams::default());
+    let telemetry = Arc::new(Telemetry::default());
+    println!("Starting TorroEQ on {}...", output.description);
+    let mut engine = AudioEngine::start(output, params, Arc::clone(&telemetry))?;
+    thread::sleep(Duration::from_millis(700));
+    let graph = Command::new("pw-dump").output()?;
+    let registered = String::from_utf8_lossy(&graph.stdout).contains("torroeq_sink");
+    engine.activate()?;
+    thread::sleep(Duration::from_millis(100));
+    let routed = Command::new("pactl")
+        .arg("get-default-sink")
+        .output()?
+        .stdout
+        == b"torroeq_sink\n";
+    let mut source = Command::new("pw-cat")
+        .args([
+            "--playback",
+            "--raw",
+            "--target",
+            "torroeq_sink",
+            "--latency",
+            "10ms",
+            "--format",
+            "f32",
+            "--rate",
+            "48000",
+            "--channels",
+            "2",
+            "-",
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()?;
+    if let Some(stdin) = source.stdin.as_mut() {
+        for block in 0..50 {
+            for offset in 0..480 {
+                let frame = block * 480 + offset;
+                let sample =
+                    (2.0 * std::f32::consts::PI * 440.0 * frame as f32 / 48_000.0).sin() * 0.1;
+                stdin.write_all(&sample.to_le_bytes())?;
+                stdin.write_all(&sample.to_le_bytes())?;
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+    }
+    drop(source.stdin.take());
+    thread::sleep(Duration::from_millis(300));
+    let _ = source.kill();
+    let _ = source.wait();
+    let snapshot = telemetry.snapshot();
+    engine.deactivate()?;
+    engine.stop();
+    if !snapshot.running || !registered || !routed || snapshot.input_peak < 0.05 {
+        anyhow::bail!(
+            "audio check failed (running={}, registered={}, routed={}, input_peak={:.3})",
+            snapshot.running,
+            registered,
+            routed,
+            snapshot.input_peak
+        );
+    }
+    println!("Audio engine healthy; virtual sink registered and stopped cleanly.");
+    Ok(())
 }
 
 fn string_prop<'a>(
@@ -474,6 +540,7 @@ fn run_pipewire(
         move |_| mainloop.quit()
     });
     telemetry.set_latency_ms(5.0);
+    telemetry.set_sample_rate(SAMPLE_RATE);
     telemetry.set_running(true);
     mainloop.run();
     stop.store(true, Ordering::Release);

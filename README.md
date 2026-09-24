@@ -1,19 +1,19 @@
 # TorroEQ
 
-A precise, keyboard-first system equalizer for PipeWire, designed as a polished terminal user interface.
+A precise, keyboard-first system equalizer for PipeWire and macOS, designed as a polished terminal user interface.
 
 ## Product direction
 
 - Ten-band graphic equalizer from 31 Hz to 16 kHz with 0.5 dB steps
 - Real-time 4096-point FFT spectrum analyzer from 20 Hz to 20 kHz
 - Keyboard and mouse operation
-- Native system-wide PipeWire processing and explicit safe activation
+- Native system-wide processing (PipeWire on Linux, Core Audio taps on macOS) and explicit safe activation
 - Presets, output selection, preamp, bypass, and clipping protection
 - A restrained visual language shared with TorroMail
 
 ## Requirements
 
-- Linux with PipeWire, WirePlumber, and `pactl`
+- Linux with PipeWire, WirePlumber, and `pactl`, or macOS 14.2 or newer (experimental)
 - Rust 1.80 or newer when building from source
 - A true-color terminal; minimum supported size is 72 x 22
 
@@ -32,6 +32,12 @@ cargo build --release
 ```
 
 TorroEQ creates a virtual `TorroEQ Equalizer` sink, makes it the default, and moves streams already playing on the selected output through the equalizer. Press `a` in the TUI to disable or re-enable system routing. The previous default and those streams are restored when TorroEQ exits cleanly.
+
+### macOS (experimental)
+
+On macOS, TorroEQ needs no virtual audio driver. It taps all system audio with a Core Audio process tap, mutes the direct path while it reads, and plays the equalized signal on the selected output through a private aggregate device. Deactivating routing with `a`, or quitting, removes the tap and audio plays directly again.
+
+macOS attributes the capture to the terminal that runs TorroEQ. Allow that terminal under System Settings > Privacy & Security > Screen & System Audio Recording (in the "System Audio Recording Only" list). Without that permission the tap delivers silence, and `--check-audio` says so.
 
 Useful diagnostics:
 

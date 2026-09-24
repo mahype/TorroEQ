@@ -1,11 +1,9 @@
-use std::io::Write;
 use std::io::{self, stdout};
 use std::panic;
-use std::process::Stdio;
 use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use crossterm::event::{
     self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyEventKind,
     KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
@@ -18,8 +16,7 @@ use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
 use ratatui::layout::Rect;
 use torroeq::app::{App, Dialog, ViewMode};
-use torroeq::audio::{AudioEngine, discover_outputs};
-use torroeq::dsp;
+use torroeq::audio::{AudioEngine, check_audio, discover_outputs};
 use torroeq::storage::{Preset, Storage};
 use torroeq::telemetry::Telemetry;
 use torroeq::ui;
@@ -63,77 +60,6 @@ fn main() -> Result<()> {
     storage.save_state(&app.saved_state())?;
     restore_result?;
     run_result
-}
-
-fn check_audio() -> Result<()> {
-    let output = discover_outputs()?
-        .into_iter()
-        .next()
-        .context("no PipeWire audio output found")?;
-    let params = Arc::new(dsp::SharedParams::default());
-    let telemetry = Arc::new(Telemetry::default());
-    println!("Starting TorroEQ on {}...", output.description);
-    let mut engine = AudioEngine::start(output, params, Arc::clone(&telemetry))?;
-    std::thread::sleep(Duration::from_millis(700));
-    let graph = std::process::Command::new("pw-dump").output()?;
-    let registered = String::from_utf8_lossy(&graph.stdout).contains("torroeq_sink");
-    engine.activate()?;
-    std::thread::sleep(Duration::from_millis(100));
-    let routed = std::process::Command::new("pactl")
-        .arg("get-default-sink")
-        .output()?
-        .stdout
-        == b"torroeq_sink\n";
-    let mut source = std::process::Command::new("pw-cat")
-        .args([
-            "--playback",
-            "--raw",
-            "--target",
-            "torroeq_sink",
-            "--latency",
-            "10ms",
-            "--format",
-            "f32",
-            "--rate",
-            "48000",
-            "--channels",
-            "2",
-            "-",
-        ])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()?;
-    if let Some(stdin) = source.stdin.as_mut() {
-        for block in 0..50 {
-            for offset in 0..480 {
-                let frame = block * 480 + offset;
-                let sample =
-                    (2.0 * std::f32::consts::PI * 440.0 * frame as f32 / 48_000.0).sin() * 0.1;
-                stdin.write_all(&sample.to_le_bytes())?;
-                stdin.write_all(&sample.to_le_bytes())?;
-            }
-            std::thread::sleep(Duration::from_millis(10));
-        }
-    }
-    drop(source.stdin.take());
-    std::thread::sleep(Duration::from_millis(300));
-    let _ = source.kill();
-    let _ = source.wait();
-    let snapshot = telemetry.snapshot();
-    engine.deactivate()?;
-    engine.stop();
-    if !snapshot.running || !registered || !routed || snapshot.input_peak < 0.05 {
-        anyhow::bail!(
-            "audio check failed (running={}, registered={}, routed={}, input_peak={:.3})",
-            snapshot.running,
-            registered,
-            routed,
-            snapshot.input_peak
-        );
-    }
-    println!("Audio engine healthy; virtual sink registered and stopped cleanly.");
-    Ok(())
 }
 
 fn setup_terminal() -> Result<Terminal<CrosstermBackend<io::Stdout>>> {
@@ -214,7 +140,7 @@ fn run(
 
 fn start_audio(app: &mut App, telemetry: Arc<Telemetry>, activate: bool) -> Option<AudioEngine> {
     let Some(output) = app.selected_output().cloned() else {
-        app.dialog = Some(Dialog::Error("No PipeWire audio output found.".into()));
+        app.dialog = Some(Dialog::Error("No audio output found.".into()));
         return None;
     };
     match AudioEngine::start(output, Arc::clone(&app.shared_params), telemetry) {
