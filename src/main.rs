@@ -25,6 +25,10 @@ use torroeq::telemetry::Telemetry;
 use torroeq::ui;
 
 fn main() -> Result<()> {
+    if std::env::args().any(|argument| argument == "--version" || argument == "-V") {
+        println!("torroeq {}", env!("CARGO_PKG_VERSION"));
+        return Ok(());
+    }
     if std::env::args().any(|argument| argument == "--list-outputs") {
         for output in discover_outputs()? {
             println!("{}\t{}", output.name, output.description);

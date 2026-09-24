@@ -1,0 +1,33 @@
+# Maintainer: Sven Wagener (mahype)
+#
+# The release workflow (.github/workflows/release.yml) fills in pkgver, pkgrel
+# and the checksums, builds and installs this package in a clean Arch
+# container, and attaches the result — PKGBUILD plus .SRCINFO — to the release
+# as torroeq-bin-aur.tar.gz. That archive is what goes to the AUR; the copy
+# here is the template.
+
+pkgname=torroeq-bin
+pkgver=0.0.0
+pkgrel=1
+pkgdesc="A precise, keyboard-first system equalizer for PipeWire"
+arch=('x86_64' 'aarch64')
+url="https://github.com/mahype/TorroEQ"
+license=('MIT')
+# libpipewire is linked; pw-dump and pw-cat come with pipewire, pactl with libpulse.
+depends=('gcc-libs' 'glibc' 'pipewire' 'pipewire-session-manager' 'libpulse')
+provides=('torroeq')
+conflicts=('torroeq')
+# Prebuilt programs: there are no debug symbols to split off.
+options=('!debug')
+_name="torroeq-${pkgver}"
+source_x86_64=("${_name}-x86_64-linux.tar.gz::${url}/releases/download/v${pkgver}/${_name}-x86_64-linux.tar.gz")
+source_aarch64=("${_name}-aarch64-linux.tar.gz::${url}/releases/download/v${pkgver}/${_name}-aarch64-linux.tar.gz")
+sha256sums_x86_64=('SKIP')
+sha256sums_aarch64=('SKIP')
+
+package() {
+  cd "${_name}-${CARCH}-linux"
+  install -Dm755 torroeq "${pkgdir}/usr/bin/torroeq"
+  install -Dm644 LICENSE "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+  install -Dm644 README.md "${pkgdir}/usr/share/doc/${pkgname}/README.md"
+}

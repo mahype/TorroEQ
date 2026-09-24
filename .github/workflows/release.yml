@@ -1,0 +1,178 @@
+name: Release
+
+# A tag like v0.1.0 builds TorroEQ for Linux (x86_64 and aarch64), builds and
+# installs the AUR package in a clean Arch container, and attaches everything to
+# a GitHub Release. Started by hand, or by a pull request that touches the
+# release or the packaging, it is a dry run: everything is built and tested,
+# nothing is published.
+
+on:
+  push:
+    tags: ['v*']
+  pull_request:
+    paths:
+      - .github/workflows/release.yml
+      - packaging/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  version:
+    name: Read the version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+      pkgrel: ${{ steps.read.outputs.pkgrel }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: read
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          version="$(sed -n '/^\[package\]/,/^\[/s/^version = "\(.*\)"/\1/p' Cargo.toml)"
+          if [[ "$REF_TYPE" == "tag" && "${REF_NAME#v}" != "$version" ]]; then
+            echo "::error::the tag says ${REF_NAME#v}, Cargo.toml says $version"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          # A dry run's package is never uploaded; build number 0 keeps it apart.
+          echo "pkgrel=$([[ "$REF_TYPE" == "tag" ]] && echo 1 || echo 0)" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build (${{ matrix.arch }})
+    needs: version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # The oldest runner images on offer, for the oldest glibc (2.35) and
+          # PipeWire (0.3.48): a program built here starts on anything newer.
+          - arch: x86_64
+            runner: ubuntu-22.04
+          - arch: aarch64
+            runner: ubuntu-22.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    env:
+      NAME: torroeq-${{ needs.version.outputs.version }}-${{ matrix.arch }}-linux
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-${{ matrix.arch }}
+      # pipewire-sys generates its bindings from the installed headers with bindgen.
+      - name: Build dependencies
+        run: sudo apt-get update && sudo apt-get install -y libpipewire-0.3-dev libspa-0.2-dev libclang-dev clang pkg-config
+      - name: Build
+        run: cargo build --release --locked
+      - name: The binary starts and says its version
+        run: |
+          set -euo pipefail
+          said="$(target/release/torroeq --version)"
+          echo "$said"
+          [[ "$said" == "torroeq ${{ needs.version.outputs.version }}" ]]
+      - name: Pack
+        run: |
+          set -euo pipefail
+          mkdir -p "dist/$NAME"
+          cp target/release/torroeq README.md LICENSE "dist/$NAME/"
+          tar -C dist --owner=0 --group=0 -czf "dist/$NAME.tar.gz" "$NAME"
+          (cd dist && sha256sum "$NAME.tar.gz" > "$NAME.tar.gz.sha256")
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tarball-${{ matrix.arch }}
+          path: |
+            dist/*.tar.gz
+            dist/*.tar.gz.sha256
+          if-no-files-found: error
+
+  aur:
+    name: AUR package (built and installed on Arch)
+    needs: [version, build]
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      PKGREL: ${{ needs.version.outputs.pkgrel }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: tarball-*
+          path: tarballs
+          merge-multiple: true
+      - name: Fill in the PKGBUILD
+        run: |
+          set -euo pipefail
+          mkdir work
+          cp packaging/aur/torroeq-bin/PKGBUILD work/
+          # makepkg takes a source it finds beside the PKGBUILD instead of
+          # downloading it — the release does not exist yet.
+          cp tarballs/*.tar.gz work/
+          sum() { cut -d' ' -f1 "tarballs/torroeq-$VERSION-$1-linux.tar.gz.sha256"; }
+          sed -i \
+            -e "s/^pkgver=.*/pkgver=$VERSION/" \
+            -e "s/^pkgrel=.*/pkgrel=$PKGREL/" \
+            -e "s/^sha256sums_x86_64=.*/sha256sums_x86_64=('$(sum x86_64)')/" \
+            -e "s/^sha256sums_aarch64=.*/sha256sums_aarch64=('$(sum aarch64)')/" \
+            work/PKGBUILD
+          # The template's note about this workflow is no use on the AUR.
+          sed -i '/^# The release workflow/,/^# here is the template\.$/d' work/PKGBUILD
+          cat work/PKGBUILD
+          ! grep -q "'SKIP'" work/PKGBUILD
+      - name: Build, install and run the package
+        run: |
+          set -euo pipefail
+          # makepkg refuses to run as root.
+          useradd --create-home builder
+          chown -R builder work
+          cd work
+          sudo -u builder makepkg --force --nodeps
+          sudo -u builder makepkg --printsrcinfo > .SRCINFO
+          # WirePlumber named up front: it is what provides pipewire-session-manager.
+          pacman -Sy --noconfirm pipewire wireplumber libpulse
+          pacman -U --noconfirm ./*.pkg.tar.zst
+          torroeq --version
+          test -f /usr/share/licenses/torroeq-bin/LICENSE
+          tar -czf ../torroeq-bin-aur.tar.gz PKGBUILD .SRCINFO
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aur
+          path: torroeq-bin-aur.tar.gz
+          if-no-files-found: error
+
+  publish:
+    name: Publish the GitHub Release
+    if: github.ref_type == 'tag'
+    needs: [version, build, aur]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        run: cd dist && cat *.sha256 > SHA256SUMS && rm *.sha256 && cat SHA256SUMS
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$TAG" dist/* \
+            --title "TorroEQ ${TAG#v}" \
+            --notes "TorroEQ for Linux, x86_64 and aarch64, built against glibc 2.35 and PipeWire 0.3.48 — it runs on anything newer.
+
+          Arch and Omarchy: \`torroeq-bin\` from the AUR, or unpack \`torroeq-bin-aur.tar.gz\` and run \`makepkg -si\`.
+
+          Anywhere else: unpack the tarball for your machine and put \`torroeq\` on your PATH. It needs PipeWire with WirePlumber, and \`pactl\` (Debian/Ubuntu: \`pulseaudio-utils\`, Fedora: \`pulseaudio-utils\`, Arch: \`libpulse\`)."
