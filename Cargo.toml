@@ -9,7 +9,7 @@ license = "MIT"
 anyhow = "1.0"
 crossterm = "0.29"
 directories = "6.0"
-# The lowest PipeWire this needs (for OBJECT_REGISTER), so it builds on older distributions.
+# Only the PipeWire features TorroEQ uses (OBJECT_REGISTER), so it builds on older distributions.
 pipewire = { version = "0.10.1", features = ["v0_3_32"] }
 ratatui = "0.30.2"
 rtrb = "0.4"

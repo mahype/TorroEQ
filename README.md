@@ -19,7 +19,7 @@ A precise, keyboard-first system equalizer for PipeWire, designed as a polished 
 
 ## Install
 
-Each [release](https://github.com/mahype/TorroEQ/releases) carries prebuilt programs for x86_64 and aarch64 Linux (glibc 2.35 and PipeWire 0.3.48 or newer).
+Each [release](https://github.com/mahype/TorroEQ/releases) carries prebuilt programs for x86_64 and aarch64 Linux (glibc 2.39 and PipeWire 1.0 or newer, e.g. Ubuntu 24.04, Debian 13, Fedora 40, current Arch).
 
 - Arch and Omarchy: `torroeq-bin` from the AUR, or unpack `torroeq-bin-aur.tar.gz` from a release and run `makepkg -si`.
 - Anywhere else: unpack the tarball for your machine and put `torroeq` on your `PATH`.

@@ -52,12 +52,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # The oldest runner images on offer, for the oldest glibc (2.35) and
-          # PipeWire (0.3.48): a program built here starts on anything newer.
+          # The oldest runner images whose PipeWire headers (1.0) the libspa
+          # bindings compile against; a program built here, with glibc 2.39,
+          # starts on anything newer.
           - arch: x86_64
-            runner: ubuntu-22.04
+            runner: ubuntu-24.04
           - arch: aarch64
-            runner: ubuntu-22.04-arm
+            runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
     env:
@@ -171,7 +172,7 @@ jobs:
         run: |
           gh release create "$TAG" dist/* \
             --title "TorroEQ ${TAG#v}" \
-            --notes "TorroEQ for Linux, x86_64 and aarch64, built against glibc 2.35 and PipeWire 0.3.48 — it runs on anything newer.
+            --notes "TorroEQ for Linux, x86_64 and aarch64, built against glibc 2.39 and PipeWire 1.0 — it runs on anything newer.
 
           Arch and Omarchy: \`torroeq-bin\` from the AUR, or unpack \`torroeq-bin-aur.tar.gz\` and run \`makepkg -si\`.
 
