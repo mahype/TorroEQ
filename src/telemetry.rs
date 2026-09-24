@@ -7,6 +7,7 @@ pub struct Telemetry {
     input_peak: AtomicU32,
     output_peak: AtomicU32,
     latency_ms: AtomicU32,
+    sample_rate: AtomicU32,
     clipped: AtomicBool,
     limited: AtomicBool,
     running: AtomicBool,
@@ -20,6 +21,7 @@ impl Default for Telemetry {
             input_peak: AtomicU32::new(0.0_f32.to_bits()),
             output_peak: AtomicU32::new(0.0_f32.to_bits()),
             latency_ms: AtomicU32::new(0.0_f32.to_bits()),
+            sample_rate: AtomicU32::new(48_000),
             clipped: AtomicBool::new(false),
             limited: AtomicBool::new(false),
             running: AtomicBool::new(false),
@@ -57,11 +59,16 @@ impl Telemetry {
             .store(latency_ms.to_bits(), Ordering::Relaxed);
     }
 
+    pub fn set_sample_rate(&self, sample_rate: u32) {
+        self.sample_rate.store(sample_rate, Ordering::Relaxed);
+    }
+
     pub fn snapshot(&self) -> TelemetrySnapshot {
         TelemetrySnapshot {
             input_peak: f32::from_bits(self.input_peak.load(Ordering::Relaxed)),
             output_peak: f32::from_bits(self.output_peak.load(Ordering::Relaxed)),
             latency_ms: f32::from_bits(self.latency_ms.load(Ordering::Relaxed)),
+            sample_rate: self.sample_rate.load(Ordering::Relaxed),
             clipped: self.clipped.swap(false, Ordering::Relaxed),
             limited: self.limited.load(Ordering::Relaxed),
             running: self.running.load(Ordering::Acquire),
@@ -78,6 +85,7 @@ pub struct TelemetrySnapshot {
     pub input_peak: f32,
     pub output_peak: f32,
     pub latency_ms: f32,
+    pub sample_rate: u32,
     pub clipped: bool,
     pub limited: bool,
     pub running: bool,

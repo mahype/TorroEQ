@@ -68,7 +68,12 @@ fn render_header(frame: &mut Frame<'_>, area: Rect, app: &mut App) {
         ViewMode::Studio => "STUDIO",
         ViewMode::Focus => "FOCUS",
     };
-    let right = format!("48 kHz / 2ch  {:>4.1} ms  ", app.telemetry.latency_ms);
+    let right = format!(
+        "{:.1} kHz / 2ch  {:>4.1} ms  ",
+        app.telemetry.sample_rate as f32 / 1000.0,
+        app.telemetry.latency_ms
+    )
+    .replace(".0 kHz", " kHz");
     let prefix_width = 10 + 2 + 5 + view.len() + 2 + status_text.chars().count() + 6;
     let output_width = usize::from(area.width).saturating_sub(prefix_width + right.len());
     let output = truncate(
