@@ -1,6 +1,17 @@
 # TorroEQ
 
+[![Release build](https://img.shields.io/github/actions/workflow/status/mahype/TorroEQ/release.yml?label=release%20build&logo=githubactions&logoColor=white)](https://github.com/mahype/TorroEQ/actions/workflows/release.yml)
+[![Release](https://img.shields.io/github/v/release/mahype/TorroEQ?sort=semver&color=D50C0C)](https://github.com/mahype/TorroEQ/releases/latest)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![Platforms](https://img.shields.io/badge/platforms-Linux%20%7C%20macOS%20%28experimental%29-lightgrey)](#requirements)
+[![PipeWire](https://img.shields.io/badge/PipeWire-1.0%2B-4A86C7)](https://pipewire.org)
+[![Rust](https://img.shields.io/badge/Rust-1.88%2B-000000?logo=rust)](Cargo.toml)
+
 A precise, keyboard-first system equalizer for PipeWire and macOS, designed as a polished terminal user interface.
+
+<p align="center">
+  <img src="docs/screenshots/studio.png" alt="TorroEQ in the Studio view: session panel with preset, master and level meter, the ten-band spectrum analyzer, and the graphic equalizer with the Electronic preset" width="820">
+</p>
 
 ## Product direction
 
@@ -14,7 +25,7 @@ A precise, keyboard-first system equalizer for PipeWire and macOS, designed as a
 ## Requirements
 
 - Linux with PipeWire, WirePlumber, and `pactl`, or macOS 14.2 or newer (experimental)
-- Rust 1.80 or newer when building from source
+- Rust 1.88 or newer when building from source
 - A true-color terminal; minimum supported size is 72 x 22
 
 ## Install
@@ -46,6 +57,8 @@ cargo run -- --list-outputs
 cargo run -- --check-audio
 cargo run -- --demo
 ```
+
+`--demo` starts the interface without system routing and feeds the equalizer and analyzer a generated signal, so the controls can be tried without changing any audio output.
 
 `--check-audio` registers the virtual sink, passes a short generated signal through the complete processing path, verifies default-route activation, restores the prior output, and exits.
 
