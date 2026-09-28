@@ -1,10 +1,13 @@
 # TorroEQ
 
+[![CI](https://img.shields.io/github/actions/workflow/status/mahype/TorroEQ/ci.yml?branch=main&label=CI&logo=githubactions&logoColor=white)](https://github.com/mahype/TorroEQ/actions/workflows/ci.yml)
+[![CodeQL](https://img.shields.io/github/actions/workflow/status/mahype/TorroEQ/codeql.yml?branch=main&label=CodeQL&logo=github)](https://github.com/mahype/TorroEQ/actions/workflows/codeql.yml)
 [![Release build](https://img.shields.io/github/actions/workflow/status/mahype/TorroEQ/release.yml?label=release%20build&logo=githubactions&logoColor=white)](https://github.com/mahype/TorroEQ/actions/workflows/release.yml)
 [![Release](https://img.shields.io/github/v/release/mahype/TorroEQ?sort=semver&color=D50C0C)](https://github.com/mahype/TorroEQ/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
-[![Platforms](https://img.shields.io/badge/platforms-Linux%20%7C%20macOS%20%28experimental%29-lightgrey)](#requirements)
+[![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%2014.2%2B%20%28experimental%29-lightgrey?logo=linux&logoColor=white)](#requirements)
 [![PipeWire](https://img.shields.io/badge/PipeWire-1.0%2B-4A86C7)](https://pipewire.org)
+[![Privacy](https://img.shields.io/badge/privacy-100%25%20local-2E7D32)](#architecture)
 [![Rust](https://img.shields.io/badge/Rust-1.88%2B-000000?logo=rust)](Cargo.toml)
 
 A precise, keyboard-first system equalizer for PipeWire and macOS, designed as a polished terminal user interface.
