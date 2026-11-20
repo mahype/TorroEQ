@@ -17,6 +17,7 @@ use ratatui::backend::CrosstermBackend;
 use ratatui::layout::Rect;
 use torroeq::app::{App, Dialog, ViewMode};
 use torroeq::audio::{AudioEngine, check_audio, discover_outputs};
+use torroeq::demo::DemoSignal;
 use torroeq::storage::{Preset, Storage};
 use torroeq::telemetry::Telemetry;
 use torroeq::ui;
@@ -45,6 +46,8 @@ fn main() -> Result<()> {
     let outputs = discover_outputs().unwrap_or_default();
     let telemetry = Arc::new(Telemetry::default());
     let mut app = App::new(state, presets, outputs, telemetry.snapshot());
+    let demo_signal =
+        demo.then(|| DemoSignal::start(Arc::clone(&app.shared_params), Arc::clone(&telemetry)));
     let mut engine = if demo {
         None
     } else {
@@ -57,6 +60,7 @@ fn main() -> Result<()> {
     if let Some(mut engine) = engine {
         engine.stop();
     }
+    drop(demo_signal);
     storage.save_state(&app.saved_state())?;
     restore_result?;
     run_result
